@@ -5,6 +5,7 @@
 class Layer{
 protected:
     float *values  = nullptr;
+    float *pre_act = nullptr;
     float *weights = nullptr;
     float *bias    = nullptr;   
     float  bias_c  = 1.0f;

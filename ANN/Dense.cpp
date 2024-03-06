@@ -13,11 +13,15 @@ void Dense::update(){
 
     for (int i = 0; i < nunits; i++)
         for (int j = 0; j < prev_nunits; j++)
-            values[i] += prev_values[j] * weights[i * prev_nunits + j];
+            pre_act[i] += prev_values[j] * weights[i * prev_nunits + j];
 
     // Add bias
     if (has_bias) 
-        for (int i = 0; i < nunits; i++) values[i] += bias[i] * bias_c;
+        for (int i = 0; i < nunits; i++) pre_act[i] += bias[i] * bias_c;
+
+    // Apply ReLU activation function
+    for (int i = 0; i < nunits; i++) 
+        values[i] = pre_act[i] > 0 ? pre_act[i] : 0.0f; 
 }
 
 void Dense::connect(Layer* prev){

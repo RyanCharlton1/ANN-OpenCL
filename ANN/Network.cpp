@@ -44,6 +44,31 @@ void Network::calc(float* data, int dsize){
         layer->update();
 }
 
+// Train the network on provided data using expected results
+void Network::fit(float* data, int dsize, float* exp, int esize){
+    if (esize != get_output_layer()->get_nunits()){
+        std::cout << "Expected size doesn't match network output" << std::endl;
+        return;
+    }
+
+    // Calculate the networks output for given data
+    calc(data, dsize);
+    // Calculate loss using MSE
+    float* output   = get_output();
+    float  loss     = 0.0f;
+    float* loss_der = new float[esize]; 
+
+    float error;
+    for (int i = 0; i < esize; i++){
+        error       = exp[i] - output[i];
+        loss       += error * error;
+        loss_der[i] = 2.0 * error / (float)esize;
+    }
+
+    std::cout << "Loss "
+
+}
+
 std::string Network::to_string(){
     std::string s;
     

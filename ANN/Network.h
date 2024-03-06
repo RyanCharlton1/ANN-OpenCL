@@ -24,6 +24,7 @@ public:
     void compile(float learn_rate);
     void set_input(float* data, int dsize);
     void calc(float* data, int dsize);
+    void fit(float* data, int dsize, float* exp, int esize);
 
     std::string to_string();
     std::string trace();
