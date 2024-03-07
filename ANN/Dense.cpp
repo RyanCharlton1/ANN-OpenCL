@@ -55,7 +55,7 @@ void Dense::optimise(float learn_rate){
     // Update bias
     if (has_bias)
         for (int i = 0; i < nunits; i++)
-            bias[i] -= learn_rate * values_grad[i];
+            bias[i] -= learn_rate * bias_grad[i];
 }
 
 void Dense::calc_act_grad(){
@@ -64,12 +64,15 @@ void Dense::calc_act_grad(){
         act_grad[i] = pre_act[i] > 0.0f ? 1.0 : 0.1f;
 }
 
-void Dense::calc_weight_grad(){
+void Dense::accumulate_weight_grad(){
     float* prev_values = prev->get_values();
 
     for (int i = 0; i < nunits; i++)
         for (int j = 0; j < prev_nunits; j++)
-            weights_grad[i * prev_nunits + j] = values_grad[i] * prev_values[j];
+            weights_grad[i * prev_nunits + j] += values_grad[i] * prev_values[j];
+    
+    for (int i = 0; i < nunits; i++)
+        bias_grad[i] += values_grad[i];
 }
 
 void Dense::calc_loss_grad(){
@@ -96,6 +99,22 @@ void Dense::calc_loss_grad(){
 void Dense::calc_value_grad(){
     for (int i = 0; i < nunits; i++)
         values_grad[i] = loss_grad[i] * act_grad[i];
+}
+
+void Dense::clear_accumulators(){
+    for (int i = 0; i < nweights; i++)
+        weights_grad[i] = 0.0f;
+
+    for (int i = 0; i < nunits; i++)
+        bias_grad[i] = 0.0f;
+}
+
+void Dense::average_accumulators(int n){
+    for (int i = 0; i < nweights; i++)
+        weights_grad[i] /= (float)n;
+
+    for (int i = 0; i < nunits; i++)
+        bias_grad[i] /= (float)n;
 }
 
 // Return string of weight matrix

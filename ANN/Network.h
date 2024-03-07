@@ -21,10 +21,17 @@ public:
 
     void add_layer(Layer* layer) { layers.push_back(layer); }
 
+    // Connect Layers, initing their memory and generating weights/bias
     void compile(float learn_rate);
+    // Store data in input Layer
     void set_input(float* data, int dsize);
+    // Feed forward data to calculate output, stored in the final Layer
     void calc(float* data, int dsize);
-    void fit(float* data, int dsize, float* exp, int esize);
+    // Clear each Layer's accumulators for weight/bias grads
+    void clear_accumulators();
+    void fit_batch(float* data, int dsize, float* exp, int esize, int bsize);
+    void fit(float* data, int dsize, float* exp, int esize,
+             int batches=1, int bsize=1, int epochs=1);
 
     std::string to_string();
     std::string trace();

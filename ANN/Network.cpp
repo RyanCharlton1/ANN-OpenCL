@@ -44,14 +44,98 @@ void Network::calc(float* data, int dsize){
         layer->update();
 }
 
-// Train the network on provided data using expected results
-void Network::fit(float* data, int dsize, float* exp, int esize){
+void Network::clear_accumulators(){
+    for (Layer* layer : layers)
+        layer->clear_accumulators();
+}
+
+void Network::fit_batch(float* data, int dsize, float* exp, int esize, 
+                        int bsize){
+    
     if (esize != get_output_layer()->get_nunits()){
         std::cout << "Expected size doesn't match network output" << std::endl;
         return;
     }
 
-    // Calculate the networks output for given data
+    // Zero out weight and bias grads from last batch
+    clear_accumulators();
+
+    float* output    = get_output();
+    float  loss      = 0.0f;
+    float* loss_grad = new float[esize];
+
+    // For each instance in batch
+    for (int b = 0; b < bsize; b++){
+        // Calculate the networks output for given data
+        calc(&data[b * dsize], dsize);
+
+        float error;
+        for (int i = 0; i < esize; i++){
+            error        = exp[b * esize + i] - output[i];
+            loss        += error * error / (2.0f * esize);
+            loss_grad[i] = -error / (float)esize;
+        }
+
+        // Calcualte activation gradient
+        Layer* out_layer = get_output_layer();
+        out_layer->calc_act_grad();
+
+        // Calculate the gradient of loss at the output layer dL/dy by
+        // multiplying loss_grad and act_grad, dL/da * da/dy = dL/dy
+        float* out_values_grad = out_layer->get_values_grad();
+        float* out_act_grad    = out_layer->get_act_grad();
+
+        for (int i = 0; i < out_layer->get_nunits(); i++)
+            out_values_grad[i] = loss_grad[i] * out_act_grad[i];
+    
+        // Back progpagate
+        for (int i = layers.size() - 1; i >= 0; i--){
+            Layer* layer = layers[i];
+            Layer* prev  = i != 0 ? layers[i-1] : input;
+            // Calculate weight gradient dL/dw
+            layer->accumulate_weight_grad();
+
+            if (prev == input) break;
+            // Calculate prev Layer's act_grad at the pre_act_values dA/dz
+            prev->calc_act_grad();
+            // Calculate prev Layer's loss_grad dL/dA by multiplying 
+            // dL/dy and dy/dA(w)
+            layer->calc_loss_grad();
+            // Calculate prev Layer's value_grad by multiplying 
+            // dL/dA(act_grad) and dA/dz(loss_grad)
+            prev->calc_value_grad();
+        }
+    }
+
+    // Average accumulated values
+    loss /= (float)bsize;
+
+    // Adjust weights with optimiser
+    for (Layer* layer : layers){
+        layer->average_accumulators(bsize);
+        layer->optimise(learn_rate);
+    }
+
+    
+    std::cout << "Loss: " << loss << std::endl;
+}
+
+// Train the network on provided data using expected results
+void Network::fit(float* data, int dsize, float* exp, int esize,
+                  int batches, int bsize, int epochs){
+
+    for (int e = 0; e < epochs; e++){
+        for (int b = 0; b < batches; b++){
+            fit_batch(&data[dsize * bsize * b], dsize,
+                      &exp[esize * bsize * b], esize, bsize);
+        }
+    }
+    /*
+    if (esize != get_output_layer()->get_nunits()){
+        std::cout << "Expected size doesn't match network output" << std::endl;
+        return;
+    }
+
     calc(data, dsize);
     // Calculate loss and loss grad using MSE
     float* output    = get_output();
@@ -66,7 +150,6 @@ void Network::fit(float* data, int dsize, float* exp, int esize){
     }
     loss /= (float)esize;
 
-    std::cout << "Weight: " << get_output_layer()->get_weights()[0] << std::endl;
     std::cout << "Error: " << error << std::endl;
     std::cout << "Loss: " << loss << std::endl;
     
@@ -87,9 +170,9 @@ void Network::fit(float* data, int dsize, float* exp, int esize){
         Layer* layer = layers[i];
         Layer* prev  = i != 0 ? layers[i-1] : input;
         // Calculate weight gradient dL/dw
-        layer->calc_weight_grad();
+        layer->accumulate_weight_grad();
 
-        if (prev = input) break;
+        if (prev == input) break;
         // Calculate prev Layer's act_grad at the pre_act_values dA/dz
         prev->calc_act_grad();
         // Calculate prev Layer's loss_grad dL/dA by multiplying 
@@ -103,6 +186,7 @@ void Network::fit(float* data, int dsize, float* exp, int esize){
     // Adjust weights with optimiser
     for (Layer* layer : layers)
         layer->optimise(learn_rate);
+    */
 }
 
 std::string Network::to_string(){

@@ -7,20 +7,20 @@ int main(){
     Network n(1);
     n.add_layer(new Dense(1, true));
     //n.add_layer(new Dense(2));
-    n.compile(1e-1f);
+    n.compile(1e-4f);
 
     std::cout << n.to_string() << std::endl;
     std::cout << n.trace() << std::endl;
 
-    float in;
-    float out;
+    float in[100];
+    float out[100];
 
-    for (int k = 0; k < 5; k++)
-    for (int i = 1; i < 6; i++){
-        in  = (float) i;
-        out = 2*in + 1;
-        n.fit(&in, 1, &out, 1);
+    for (int i = 0; i < 100; i++){
+        in[i]  = (float)i;
+        out[i] = 2 * in[i] + 1.0f; 
     }
+
+    n.fit(in, 1, out, 1, 20, 5, 5);
 
     std::cout << n.to_string() << std::endl;
     std::cout << n.trace() << std::endl;
