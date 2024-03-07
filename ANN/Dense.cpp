@@ -6,7 +6,7 @@
 
 void Dense::update(){
     // Clear values
-    for (int i = 0; i < nunits; i++) values[i] = 0.0f;
+    for (int i = 0; i < nunits; i++) pre_act[i] = 0.0f;
 
     // Multiply weight matrix by prev Layer's values
     float* prev_values = prev->get_values();
@@ -17,11 +17,11 @@ void Dense::update(){
 
     // Add bias
     if (has_bias) 
-        for (int i = 0; i < nunits; i++) pre_act[i] += bias[i] * bias_c;
+        for (int i = 0; i < nunits; i++) pre_act[i] += bias[i];
 
-    // Apply ReLU activation function
+    // Apply leaky ReLU activation function
     for (int i = 0; i < nunits; i++) 
-        values[i] = pre_act[i] > 0 ? pre_act[i] : 0.0f; 
+        values[i] = pre_act[i] > 0 ? pre_act[i] : 0.1f * pre_act[i]; 
 }
 
 void Dense::connect(Layer* prev){
@@ -29,9 +29,8 @@ void Dense::connect(Layer* prev){
     prev_nunits = prev->get_nunits();
     nweights    = prev_nunits * nunits;
 
-    weights = new float[nweights];
-
-    if (has_bias) bias = new float[nunits];
+    weights      = new float[nweights];
+    weights_grad = new float[nweights];
 
     // Init weights with glorot
     float half_range = sqrtf(6.0 / (prev_nunits + nunits));
@@ -43,6 +42,60 @@ void Dense::connect(Layer* prev){
     if (has_bias)
         for (int i = 0; i < nunits; i++)
             bias[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
+}
+
+void Dense::optimise(float learn_rate){
+    // Update weights 
+    for (int i = 0; i < nunits; i++)
+        for (int j = 0; j < prev_nunits; j++){
+            int index       = i * prev_nunits + j;
+            weights[index] -= learn_rate * weights_grad[index];
+            }
+
+    // Update bias
+    if (has_bias)
+        for (int i = 0; i < nunits; i++)
+            bias[i] -= learn_rate * values_grad[i];
+}
+
+void Dense::calc_act_grad(){
+    // Using leaky ReLU 
+    for (int i = 0; i < nunits; i++)
+        act_grad[i] = pre_act[i] > 0.0f ? 1.0 : 0.1f;
+}
+
+void Dense::calc_weight_grad(){
+    float* prev_values = prev->get_values();
+
+    for (int i = 0; i < nunits; i++)
+        for (int j = 0; j < prev_nunits; j++)
+            weights_grad[i * prev_nunits + j] = values_grad[i] * prev_values[j];
+}
+
+void Dense::calc_loss_grad(){
+    float* prev_loss_grad = prev->get_loss_grad();
+
+    // Weights matrix is prev_nunits by nunits:
+    // [0, 1, ... prev_nunits]
+    // [1, ...               ]
+    // [...                  ]
+    // [nunits, ...          ]
+    // Because we're calculating backwards going from y to z:
+    // Read collumns instead of rows
+    for (int i = 0; i < prev_nunits; i++){
+        float n = 0.0f;
+
+        for (int j = 0; j < nunits; j++){
+            n += prev_loss_grad[j] * weights[j * prev_nunits + i];
+        }
+
+        prev_loss_grad[i] = n;
+    }
+}
+
+void Dense::calc_value_grad(){
+    for (int i = 0; i < nunits; i++)
+        values_grad[i] = loss_grad[i] * act_grad[i];
 }
 
 // Return string of weight matrix
@@ -70,8 +123,7 @@ std::string Dense::to_string(){
         }
 
         s.pop_back();
-        sprintf(buffer, "] x % .5f\n", bias_c);
-        s += buffer;
+        s += "]\n";
     }
 
     s += "\n";

@@ -10,6 +10,15 @@ public:
     void update() override;
     // Connect to prev Layer and init memory for Dense topology
     void connect(Layer* prev) override;
+    void optimise(float learn_rate) override;
+    void calc_act_grad() override;
+    // Calculate weight grad dL/dw by multilpying dL/dy * dy/dw(z)
+    void calc_weight_grad() override;
+    // Calculate prev Layer's loss_grad dL/dA by multiplying dL/dy and dy/dA(w^T)
+    void calc_loss_grad() override;
+    // Calculate value_grad by multiplying dL/dA and dA/dz
+    void calc_value_grad() override;
+
     // Print each Layer's weights
     std::string to_string() override;
 };

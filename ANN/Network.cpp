@@ -17,7 +17,7 @@ void Network::compile(float learn_rate){
     this->learn_rate = learn_rate;
 
     // Temporary for debugging purposes
-    srand(1212321);
+    srand(392840238490);
 
     // Connect each Layer to the last, inits memory and sets vars 
     // refering to prev layer 
@@ -53,20 +53,56 @@ void Network::fit(float* data, int dsize, float* exp, int esize){
 
     // Calculate the networks output for given data
     calc(data, dsize);
-    // Calculate loss using MSE
-    float* output   = get_output();
-    float  loss     = 0.0f;
-    float* loss_der = new float[esize]; 
+    // Calculate loss and loss grad using MSE
+    float* output    = get_output();
+    float  loss      = 0.0f;
+    float* loss_grad = new float[esize]; 
 
     float error;
     for (int i = 0; i < esize; i++){
-        error       = exp[i] - output[i];
-        loss       += error * error;
-        loss_der[i] = 2.0 * error / (float)esize;
+        error        = exp[i] - output[i];
+        loss        += error * error / 2.0f;
+        loss_grad[i] = -error / (float)esize;
+    }
+    loss /= (float)esize;
+
+    std::cout << "Weight: " << get_output_layer()->get_weights()[0] << std::endl;
+    std::cout << "Error: " << error << std::endl;
+    std::cout << "Loss: " << loss << std::endl;
+    
+    // Calcualte activation gradient
+    Layer* out_layer = get_output_layer();
+    out_layer->calc_act_grad();
+
+    // Calculate the gradient of loss at the output layer dL/dy by
+    // multiplying loss_grad and act_grad, dL/da * da/dy = dL/dy
+    float* out_values_grad = out_layer->get_values_grad();
+    float* out_act_grad    = out_layer->get_act_grad();
+
+    for (int i = 0; i < out_layer->get_nunits(); i++)
+        out_values_grad[i] = loss_grad[i] * out_act_grad[i];
+    
+    // Back progpagate
+    for (int i = layers.size() - 1; i >= 0; i--){
+        Layer* layer = layers[i];
+        Layer* prev  = i != 0 ? layers[i-1] : input;
+        // Calculate weight gradient dL/dw
+        layer->calc_weight_grad();
+
+        if (prev = input) break;
+        // Calculate prev Layer's act_grad at the pre_act_values dA/dz
+        prev->calc_act_grad();
+        // Calculate prev Layer's loss_grad dL/dA by multiplying 
+        // dL/dy and dy/dA(w)
+        layer->calc_loss_grad();
+        // Calculate prev Layer's value_grad by multiplying 
+        // dL/dA(act_grad) and dA/dz(loss_grad)
+        prev->calc_value_grad();
     }
 
-    std::cout << "Loss "
-
+    // Adjust weights with optimiser
+    for (Layer* layer : layers)
+        layer->optimise(learn_rate);
 }
 
 std::string Network::to_string(){
