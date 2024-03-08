@@ -1,28 +1,131 @@
 #include <ANN/Dense.h>
+#include <ANN/CLData.h>
 
 #include <random>
 #include <cstring>
 #include <string>
 
-void Dense::update(){
-    // Clear values
-    for (int i = 0; i < nunits; i++) pre_act[i] = 0.0f;
+void Dense::init_cl_mem(cl_context context, int bsize){
+    this->bsize = bsize;
+    values_clmem = alloc_buffer(
+        context, "values", bsize * nunits * sizeof(float), values,
+        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
+    
+    weights_clmem = alloc_buffer(
+        context, "weights", nweights * sizeof(float), weights, 
+        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
 
-    // Multiply weight matrix by prev Layer's values
-    float* prev_values = prev->get_values();
-
-    for (int i = 0; i < nunits; i++)
-        for (int j = 0; j < prev_nunits; j++)
-            pre_act[i] += prev_values[j] * weights[i * prev_nunits + j];
-
-    // Add bias
-    if (has_bias) 
-        for (int i = 0; i < nunits; i++) pre_act[i] += bias[i];
-
-    // Apply leaky ReLU activation function
-    for (int i = 0; i < nunits; i++) 
-        values[i] = pre_act[i] > 0 ? pre_act[i] : 0.1f * pre_act[i]; 
+    bias_clmem = alloc_buffer(
+        context, "bias", nunits * sizeof(float), bias,
+        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
+    
+    pre_act_values_clmem = alloc_buffer(
+        context, "pre act values", bsize * nunits * sizeof(float));
 }
+
+void Dense::free_cl_mem(){
+    clReleaseMemObject(values_clmem);
+    clReleaseMemObject(weights_clmem);
+    clReleaseMemObject(bias_clmem);
+    clReleaseMemObject(pre_act_values_clmem);
+}
+
+void Dense::cl_to_host_values() {
+    cl_int status = clEnqueueReadBuffer(
+        cl->command_queue, values_clmem, CL_FALSE, 0, 
+        nunits * sizeof(float), values, 0, NULL, NULL);
+
+    cl_print_err("Dense cl_to_host_values", status);
+    clFinish(cl->command_queue);
+}
+
+void Dense::cl_to_host_weights() {
+    cl_int status = clEnqueueReadBuffer(
+        cl->command_queue, weights_clmem, CL_FALSE, 0, 
+        nweights * sizeof(float), weights, 0, NULL, NULL);
+    cl_print_err("Dense cl_to_host_weights", status);
+    clFinish(cl->command_queue);
+}
+
+void Dense::calc_pre_act_values(){
+    size_t work_size       = bsize * nunits;
+    size_t local_work_size = nunits;
+    
+    call_kernel(
+        cl, mat_vec_mult, 
+        1, NULL, &work_size, &local_work_size, 0, NULL, NULL,
+        // Args
+        prev_nunits,
+        &weights_clmem,
+        prev->get_values_clmem(),
+        &pre_act_values_clmem);
+
+    clFinish(cl->command_queue);
+}
+
+void Dense::add_bias(){
+    size_t work_size       = bsize * nunits;
+    size_t local_work_size = nunits;
+    
+    call_kernel(
+        cl, vec_vec_add_inplace,
+        1, NULL, &work_size, &local_work_size, 0, NULL, NULL,
+        // Args
+        &pre_act_values_clmem,
+        &bias_clmem);
+    
+    clFinish(cl->command_queue);
+}
+
+void Dense::apply_act(){
+    size_t work_size = bsize * nunits; 
+    switch (act)
+    {
+    case ReLU:
+        call_kernel(
+            cl, ReLU, 
+            1, NULL, &work_size, NULL, 0, NULL, NULL,
+            // Args
+            &pre_act_values_clmem,
+            &values_clmem);
+        break;
+
+    case leaky_ReLU:
+        call_kernel(
+            cl, leaky_ReLU, 
+            1, NULL, &work_size, NULL, 0, NULL, NULL,
+            // Args
+            &pre_act_values_clmem,
+            &values_clmem);
+        break;
+    
+    default:
+        std::cout << "Activation function not found" << std::endl;
+        break;
+    }
+
+    clFinish(cl->command_queue);
+}
+
+//void Dense::update(){
+//    //// Clear values
+//    //for (int i = 0; i < nunits; i++) pre_act[i] = 0.0f;
+////
+//    //// Multiply weight matrix by prev Layer's values
+//    //float* prev_values = prev->get_values();
+////
+//    //for (int i = 0; i < nunits; i++)
+//    //    for (int j = 0; j < prev_nunits; j++)
+//    //        pre_act[i] += prev_values[j] * weights[i * prev_nunits + j];
+////
+//    //// Add bias
+//    //if (has_bias) 
+//    //    for (int i = 0; i < nunits; i++) pre_act[i] += bias[i];
+////
+//    //// Apply leaky ReLU activation function
+//    //for (int i = 0; i < nunits; i++) 
+//    //    values[i] = pre_act[i] > 0 ? pre_act[i] : 0.1f * pre_act[i]; 
+//}
 
 void Dense::connect(Layer* prev){
     this->prev  = prev; 

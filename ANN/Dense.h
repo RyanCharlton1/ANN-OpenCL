@@ -5,9 +5,24 @@
 class Dense : public Layer{
 
 public:
-    Dense(int nunits, bool bias=true) : Layer(nunits, bias) {}
+    Dense(int nunits, Function act, bool bias=true) 
+    : Layer(nunits, act, bias) {}
 
-    void update() override;
+
+    // Create cl mem afor values and weights and store weights
+    void init_cl_mem(cl_context context, int bsize=1) override;
+    void free_cl_mem() override;
+
+    void cl_to_host_values() override;
+    void cl_to_host_weights() override;
+
+    //void update() override;
+    // Past values mutliplied by weights
+    void calc_pre_act_values() override;
+    // Add bias to pre act values
+    void add_bias() override;
+    // Apply activation funtion pre act values
+    void apply_act() override;
     // Connect to prev Layer and init memory for Dense topology
     void connect(Layer* prev) override;
     void optimise(float learn_rate) override;
