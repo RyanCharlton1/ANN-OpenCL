@@ -12,7 +12,7 @@ int main(){
     Network n(1);
     n.add_layer(new Dense(16, leaky_ReLU));
     n.add_layer(new Dense(1,  leaky_ReLU));
-    n.compile(1e-4f);
+    n.compile(1e-4f, MSE, GrdDsc);
 
     std::cout << n.to_string() << std::endl;
 
@@ -24,8 +24,12 @@ int main(){
         out[i] = 2 * in[i] + 1.0f; 
     }
 
-    n.fit(&in[1], 1, out, 1, 1, 1, 1);
+    n.fit(in, 1, out, 1, 20, 5, 5);
 
+    std::cout << n.to_string() << std::endl;
+
+    //float f = 3.0f;
+    //n.calc(&f, 1);
     std::cout << n.trace() << std::endl;
     return 0;
 }

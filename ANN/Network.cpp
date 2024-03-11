@@ -64,7 +64,7 @@ Network::Network(int ninput){
         {CL_QUEUE_PROPERTIES, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, 0};
     // Create a command buffer
     cl.command_queue = clCreateCommandQueueWithProperties(
-        cl.context, cl.device_list[0], prop, &status);
+        cl.context, cl.device_list[0], 0, &status);
     cl_print_err("Command queue creation:\t", status);
 
     // Load kernel code from file
@@ -106,8 +106,10 @@ Network::~Network(){
     delete input;
 }
 
-void Network::compile(float learn_rate){
+void Network::compile(float learn_rate, Function loss, Function opt){
     this->learn_rate = learn_rate;
+    this->loss       = loss;
+    this->opt        = opt;
 
     // Temporary for debugging purposes
     srand(392840238490);
@@ -122,15 +124,50 @@ void Network::compile(float learn_rate){
     }
 }
 
+void Network::init_clmem(int bsize){
+    int output_size = get_output_layer()->get_nunits();    
+    
+    expected_clmem = alloc_buffer(
+        cl.context, "expected_clmem", bsize * output_size * sizeof(float));
+
+    // Computing eache element and summing in host mem is much easier 
+    // and more efficient than implementing a mutex for the single value
+    loss_clmem = alloc_buffer(
+        cl.context, "loss_clmem", bsize * output_size * sizeof(float));
+
+    loss_grad_clmem = alloc_buffer(
+        cl.context, "loss_grad_clmem", bsize * output_size * sizeof(float));
+}
+
+void Network::free_clmem(){ 
+    clReleaseMemObject(expected_clmem);
+    clReleaseMemObject(loss_clmem);
+    clReleaseMemObject(loss_grad_clmem);
+}
+
+void Network::host_to_cl_expected(float* exp, int esize){
+    cl_int status = clEnqueueWriteBuffer(
+        cl.command_queue, expected_clmem, CL_TRUE, 0, esize * sizeof(float),
+        exp, 0, NULL, NULL);
+    
+    cl_print_err("host to cl expected", status);
+    clFinish(cl.command_queue);
+}
+
 void Network::cl_to_host_weights(){
     for (Layer* layer : layers)
         layer->cl_to_host_weights();
 }
 
 void Network::cl_to_host_values(){
-    //input->cl_to_host_values();
+    input->cl_to_host_values();
     for (Layer* layer : layers)
         layer->cl_to_host_values();
+}
+
+void Network::cl_to_host(){
+    cl_to_host_values();
+    cl_to_host_weights();
 }
 
 // Inits a read only cl buffer with the input data in
@@ -143,94 +180,135 @@ void Network::set_input(float* data, int dsize){
     clFinish(cl.command_queue);
 }
 
-void Network::calc(float* data, int dsize){
+void Network::calc_cl(float* data, int dsize){
     set_input(data, dsize);
 
     for (Layer* layer : layers)
         layer->update();
 }
 
-void Network::clear_accumulators(){
+float* Network::calc(float* data, int dsize){
+
+    if (dsize != ninput){
+        std::cout << "Invalid input data size" << std::endl;
+        return nullptr;
+    }
+    
+    // OpenCL init mem 
+    init_clmem(1);
+    input->init_cl_mem(cl.context, 1);
     for (Layer* layer : layers)
-        layer->clear_accumulators();
+        layer->init_cl_mem(cl.context, 1);
+
+    calc_cl(data, dsize);
+
+    cl_to_host();
+
+    // OpenCL free mem
+    free_clmem();
+    for (Layer* layer: layers)
+        layer->free_cl_mem();
+
+    return get_output();
+}
+
+void Network::calc_loss(int bsize){
+    Layer* out_layer   = get_output_layer();
+    size_t bsize_s     = bsize;
+    size_t global_size = bsize_s * out_layer->get_nunits();
+
+    switch (loss)
+    {
+    case MSE:
+        call_kernel(&cl, MSE, 
+            1, NULL, &global_size, NULL, 0, NULL, NULL,
+            // Args
+            &expected_clmem,
+            out_layer->get_values_clmem(),
+            &loss_clmem);
+
+        call_kernel(&cl, MSE_der,
+            1, NULL, &global_size, &bsize_s, 0, NULL, NULL,
+            // Args
+            &expected_clmem,
+            out_layer->get_values_clmem(),
+            &loss_grad_clmem);
+
+        break;
+    
+    default:
+        std::cout << "Loss function not found" << std::endl;
+        break;
+    }
+
+    clFinish(cl.command_queue);
+    
+    float* loss_arr = new float[global_size];
+    cl_int status = clEnqueueReadBuffer(
+        cl.command_queue, loss_clmem, CL_TRUE, 0, global_size * sizeof(float),
+        loss_arr, 0, NULL, NULL);
+    cl_print_err("Read loss buffer", status);
+
+    float l = 0.0f;
+    for (int i = 0; i < global_size; i++)
+        l += loss_arr[i];
+
+    std::cout << "Loss: " << l << std::endl;
+}
+
+void Network::calc_output_value_grad(int dsize){
+    Layer* out_layer = get_output_layer();
+    out_layer->calc_act_grad();
+
+    size_t out_nunits = out_layer->get_nunits();
+    size_t work_size  = dsize * out_nunits;
+    call_kernel(&cl, vec_vec_mult,
+        1, NULL, &work_size, NULL, 0, NULL, NULL,
+        // Args
+        &loss_grad_clmem,
+        out_layer->get_act_grad_clmem(),
+        out_layer->get_values_grad_clmem());
+    clFinish(cl.command_queue);
 }
 
 void Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
                            int bsize){
 
     // Feed forward whole batch 
-    calc(data, dsize * bsize);
+    calc_cl(data, dsize * bsize);
+    // Send expected results to cl_mem
+    host_to_cl_expected(exp, esize * bsize);
+    // Calculate loss 
+    calc_loss(bsize);
 
-}
-    
+    // Calculate value gradient at last layer by multiplying its
+    // act gradient by loss gradient, dL/dy = dL/dA * dA/dy
+    calc_output_value_grad(bsize * dsize);
 
-void Network::fit_batch(float* data, int dsize, float* exp, int esize, 
-                        int bsize){
-    
+    // Backpropagate
+    for (int i = layers.size() - 1; i >= 0; i--){
+        Layer* layer = layers[i];
+        Layer* prev  = i != 0 ? layers[i-1] : input;
+        // Calculate weight gradient dL/dw
+        layer->calc_weight_grad();
 
-    // Zero out weight and bias grads from last batch
-    clear_accumulators();
-
-    float* output    = get_output();
-    float  loss      = 0.0f;
-    float* loss_grad = new float[esize];
-
-    // For each instance in batch
-    for (int b = 0; b < bsize; b++){
-        // Calculate the networks output for given data
-        calc(&data[b * dsize], dsize);
-
-        float error;
-        for (int i = 0; i < esize; i++){
-            error        = exp[b * esize + i] - output[i];
-            loss        += error * error / (2.0f * esize);
-            loss_grad[i] = -error / (float)esize;
-        }
-
-        // Calcualte activation gradient
-        Layer* out_layer = get_output_layer();
-        out_layer->calc_act_grad();
-
-        // Calculate the gradient of loss at the output layer dL/dy by
-        // multiplying loss_grad and act_grad, dL/da * da/dy = dL/dy
-        float* out_values_grad = out_layer->get_values_grad();
-        float* out_act_grad    = out_layer->get_act_grad();
-
-        for (int i = 0; i < out_layer->get_nunits(); i++)
-            out_values_grad[i] = loss_grad[i] * out_act_grad[i];
-    
-        // Back progpagate
-        for (int i = layers.size() - 1; i >= 0; i--){
-            Layer* layer = layers[i];
-            Layer* prev  = i != 0 ? layers[i-1] : input;
-            // Calculate weight gradient dL/dw
-            layer->accumulate_weight_grad();
-
-            if (prev == input) break;
-            // Calculate prev Layer's act_grad at the pre_act_values dA/dz
-            prev->calc_act_grad();
-            // Calculate prev Layer's loss_grad dL/dA by multiplying 
-            // dL/dy and dy/dA(w)
-            layer->calc_loss_grad();
-            // Calculate prev Layer's value_grad by multiplying 
-            // dL/dA(act_grad) and dA/dz(loss_grad)
-            prev->calc_value_grad();
-        }
+        if (prev == input) break;
+        // Calculate prev Layer's act_grad dA/dz at the pre_act_values 
+        prev->calc_act_grad();
+        // Calculate prev Layer's loss_grad dL/dA by multiplying 
+        // dL/dy and dy/dA(w)
+        layer->calc_loss_grad();
+        // Calculate prev Layer's value_grad by multiplying 
+        // dL/dA(act_grad) and dA/dz(loss_grad)
+        prev->calc_value_grad();
     }
 
-    // Average accumulated values
-    loss /= (float)bsize;
+    for (Layer* layer : layers)
+        layer->optimise(opt, learn_rate);
 
-    // Adjust weights with optimiser
-    for (Layer* layer : layers){
-        layer->average_accumulators(bsize);
-        layer->optimise(learn_rate);
-    }
-
-    
-    std::cout << "Loss: " << loss << std::endl;
+    clFinish(cl.command_queue);
 }
-
+    
 // Train the network on provided data using expected results
 void Network::fit(float* data, int dsize, float* exp, int esize,
                   int batches, int bsize, int epochs){
@@ -244,13 +322,14 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
         std::cout << "Expected size doesn't match network output" << std::endl;
         return;
     }
-    // OpenCL init mem here
+
+    // OpenCL init mem 
+    init_clmem(bsize);
     input->init_cl_mem(cl.context, bsize);
     for (Layer* layer : layers)
         layer->init_cl_mem(cl.context, bsize);
 
     
-
     for (int e = 0; e < epochs; e++){
         for (int b = 0; b < batches; b++){
             fit_batch_cl(&data[dsize * bsize * b], dsize,
@@ -258,7 +337,10 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
         }
     }
 
-    cl_to_host_values();
+    cl_to_host();
+
+    // OpenCL free mem
+    free_clmem();
     for (Layer* layer: layers)
         layer->free_cl_mem();
 }

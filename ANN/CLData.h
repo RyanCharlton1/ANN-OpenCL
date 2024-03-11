@@ -5,11 +5,18 @@
 #include <iostream>
 #include <map>
 
-#define FUNCTION_COUNT 4
+#define FUNCTION_COUNT 13
 enum Function {
     mat_vec_mult,
+    vec_vec_mult,
     vec_vec_add_inplace,
-    ReLU, leaky_ReLU,
+    mat_vec_mult_trans,
+    weight_grad,
+    bias_grad,
+    ReLU, ReLU_der,
+    leaky_ReLU, leaky_ReLU_der,
+    MSE, MSE_der,
+    GrdDsc,
 };
 
 struct CLdata{

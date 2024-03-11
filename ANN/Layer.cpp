@@ -13,7 +13,7 @@ Layer::Layer(int nunits, Function act, bool bias){
     values_grad = new float[nunits];
     act_grad    = new float[nunits];
     loss_grad   = new float[nunits];
-    bias_grad   = new float[nunits];
+    //bias_grad   = new float[nunits];
 }
 
 Layer::~Layer(){
@@ -26,7 +26,7 @@ Layer::~Layer(){
     if (act_grad)     delete[] act_grad;
     if (loss_grad)    delete[] loss_grad;
     if (weights_grad) delete[] weights_grad;
-    if (bias_grad)    delete[] bias_grad;
+    //if (bias_grad)    delete[] bias_grad;
 }
 
 void Layer::update(){

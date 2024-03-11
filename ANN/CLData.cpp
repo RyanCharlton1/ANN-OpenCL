@@ -108,12 +108,30 @@ const char* function_to_string(Function f){
     {
     case mat_vec_mult:
         return "mat_vec_mult";
+    case vec_vec_mult:
+        return "vec_vec_mult";
     case vec_vec_add_inplace:
         return "vec_vec_add_inplace";
+    case mat_vec_mult_trans:
+        return "mat_vec_mult_trans";
+    case weight_grad:
+        return "weight_grad";
+    case bias_grad:
+        return "bias_grad";
     case ReLU:
         return "ReLU";
+    case ReLU_der:
+        return "ReLU_der";
     case leaky_ReLU:
         return "leaky_ReLU";
+    case leaky_ReLU_der:
+        return "leaky_ReLU_der";
+    case MSE:
+        return "MSE";
+    case MSE_der:
+        return "MSE_der";
+    case GrdDsc:
+        return "GrdDsc";
     }
     return "error";
 }
@@ -122,12 +140,30 @@ const char* function_arg_string(Function f){
     switch (f){
     case mat_vec_mult:
         return "iccc";
+    case vec_vec_mult:
+        return "ccc";
     case vec_vec_add_inplace:
         return "cc";
+    case mat_vec_mult_trans:
+        return "iccc";
+    case weight_grad:
+        return "iccc";
+    case bias_grad:
+        return "iicc";
     case ReLU:
+        return "cc";
+    case ReLU_der:
         return "cc";
     case leaky_ReLU:
         return "cc";
+    case leaky_ReLU_der:
+        return "cc";
+    case MSE:
+        return "ccc";
+    case MSE_der:
+        return "ccc";
+    case GrdDsc:
+        return "fcc";
     }
     return "error";
 }
@@ -185,8 +221,9 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
 
     
     status = clEnqueueNDRangeKernel(
-    cl->command_queue, kernel, work_dim, global_work_offset, global_work_size,
-    local_work_size, num_events_in_wait_list, event_wait_list, event);
+        cl->command_queue, kernel, work_dim, global_work_offset, 
+        global_work_size, local_work_size, num_events_in_wait_list, 
+        event_wait_list, event);
     cl_print_err("call_kernel enqueue", status);
 
     va_end(args);

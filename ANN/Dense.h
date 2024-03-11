@@ -25,19 +25,17 @@ public:
     void apply_act() override;
     // Connect to prev Layer and init memory for Dense topology
     void connect(Layer* prev) override;
-    void optimise(float learn_rate) override;
-    void calc_act_grad() override;
+    void optimise(Function optimiser, float learn_rate) override;
+
     // Calculate weight grad dL/dw by multilpying dL/dy * dy/dw(z)
-    void accumulate_weight_grad() override;
+    void calc_weight_grad() override;
+
     // Calculate prev Layer's loss_grad dL/dA by multiplying dL/dy and dy/dA(w^T)
     void calc_loss_grad() override;
     // Calculate value_grad by multiplying dL/dA and dA/dz
     void calc_value_grad() override;
-    // Set all weights/bias grad to 0.0f
-    void clear_accumulators() override;
-    // Divide weight/bias grad by n
-    void average_accumulators(int n) override;
-
+    // Calculate the activation function gradient at the pre_act_values
+    void calc_act_grad() override;
     // Print each Layer's weights
     std::string to_string() override;
 };
