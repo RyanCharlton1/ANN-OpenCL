@@ -41,7 +41,7 @@ void vec_vec_mult(__global float* vec_a,
     vec_c[i] = vec_a[i] * vec_b[i];
 
 #ifdef DEBUG
-    printf("%d:%f*%f\n", i, vec_a[i], vec_b[i]);
+    printf("vec_vec_mult %d:%f*%f\n", i, vec_a[i], vec_b[i]);
 #endif
 }
 
@@ -212,17 +212,82 @@ void MSE(__global float* y,
 __kernel 
 void MSE_der(__global float* y,
              __global float* y_,
-             __global float* x){
+             __global float* der){
 
     int i = get_global_id(0);
     int n = get_local_size(0);
 
     float err = y[i] - y_[i];
     
-    x[i] = -err / (float)n;
+    der[i] = -err / (float)n;
 
 #ifdef DEBUG
-    printf("MSE_der:%f = -%f / %f\n", x[i], err, (float)n);
+    printf("MSE_der:%f = -%f / %f\n", der[i], err, (float)n);
+#endif
+}
+
+// Softmax bottom sum, giving each batch one job is more efficient than
+// making a mutex for the sum
+__kernel
+void softmax_sum(int    zsize,
+        __global float* sums,
+        __global float* z){
+
+    int g = get_global_id(0);
+
+    float sum = 0.0f;
+    for (int i = 0; i < zsize; i++)
+        sum += exp(z[g * zsize + i]);
+
+    sums[g] = sum;
+
+#ifdef DEBUG
+    printf("softmax_sum[%d]=%f\n", g, sum);
+#endif
+}
+
+// Softmax, can do multiple batches, necerssary to set local work
+// groups, even for a single batch 
+__kernel
+void softmax(__global float* sums,
+             __global float* z,
+             __global float* out){
+
+    int i = get_global_id(0);
+    int s = get_local_size(0);
+
+    out[i] = exp(z[i]) / sums[i/s];
+
+#ifdef DEBUG
+    printf("softmax[%d] = %f / %f\n", i, exp(z[i]), sums[i/s]);
+#endif
+}
+
+// Set local work groups for each batch 
+__kernel 
+void cross_entropy(__global float* y,
+                   __global float* y_,
+                   __global float* x){
+
+    int   i = get_global_id(0);
+    float s = (float)get_local_size(0);
+
+    x[i] = -y[i] * log(y_[i]) / s;
+}
+
+// Softmax der, combining the cross entropy and softmax der makes 
+// calculation very efficient, but the diff calculate is dL/dA not the
+// dL/dy like normal, so function must be called with value_grad as der
+__kernel
+void cross_entropy_der(__global float* y,
+                       __global float* y_,
+                       __global float* der){
+
+    int i = get_global_id(0);
+
+    der[i] = y_[i] - y[i];
+#ifdef DEBUG
+    printf("cross_entropy_der[%d]: %f = %f - %f\n", i, der[i], y_[i], y[i]);
 #endif
 }
 

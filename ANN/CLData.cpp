@@ -126,10 +126,18 @@ const char* function_to_string(Function f){
         return "leaky_ReLU";
     case leaky_ReLU_der:
         return "leaky_ReLU_der";
+    case softmax:
+        return "softmax";
+    case softmax_sum:
+        return "softmax_sum";
     case MSE:
         return "MSE";
     case MSE_der:
         return "MSE_der";
+    case cross_entropy:
+        return "cross_entropy";
+    case cross_entropy_der:
+        return "cross_entropy_der";
     case GrdDsc:
         return "GrdDsc";
     }
@@ -158,9 +166,17 @@ const char* function_arg_string(Function f){
         return "cc";
     case leaky_ReLU_der:
         return "cc";
+    case softmax:
+        return "ccc";
+    case softmax_sum:
+        return "icc";
     case MSE:
         return "ccc";
     case MSE_der:
+        return "ccc";
+    case cross_entropy:
+        return "ccc";
+    case cross_entropy_der:
         return "ccc";
     case GrdDsc:
         return "fcc";

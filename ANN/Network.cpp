@@ -112,7 +112,8 @@ void Network::compile(float learn_rate, Function loss, Function opt){
     this->opt        = opt;
 
     // Temporary for debugging purposes
-    srand(392840238490);
+    //srand(392840238490);
+    srand(time(NULL));
     input->set_cl(&cl);
     // Connect each Layer to the last, inits memory and sets vars 
     // refering to prev layer 
@@ -235,6 +236,23 @@ void Network::calc_loss(int bsize){
             &loss_grad_clmem);
 
         break;
+
+    case cross_entropy:
+        call_kernel(&cl, cross_entropy,
+            1, NULL, &global_size, &bsize_s, 0, NULL, NULL,
+            // Args
+            &expected_clmem,
+            out_layer->get_values_clmem(),
+            &loss_clmem);
+
+        call_kernel(&cl, cross_entropy_der,
+            1, NULL, &global_size, NULL, 0, NULL, NULL,
+            // Args
+            &expected_clmem,
+            out_layer->get_values_clmem(),
+            out_layer->get_values_grad_clmem());
+
+        break;
     
     default:
         std::cout << "Loss function not found" << std::endl;
@@ -257,6 +275,11 @@ void Network::calc_loss(int bsize){
 }
 
 void Network::calc_output_value_grad(int dsize){
+    // Cross entropy derivative is combined with softmax in the loss
+    // calculation and stored in out_values_grad already.
+    if (loss == cross_entropy)
+        return;
+
     Layer* out_layer = get_output_layer();
     out_layer->calc_act_grad();
 

@@ -37,6 +37,9 @@ void Dense::init_cl_mem(cl_context context, int bsize){
     bias_grad_clmem = alloc_buffer(
         context, "bias_grad_clmem", nunits * sizeof(float));
 
+    softmax_sum_clmem = alloc_buffer(
+        context, "softmax_sum_clmem", bsize * sizeof(float));
+
 }
 
 void Dense::free_cl_mem(){
@@ -100,13 +103,38 @@ void Dense::add_bias(){
 
 void Dense::apply_act(){
     size_t work_size = bsize * nunits; 
+    size_t bsize_s   = bsize;
+    size_t nunits_s  = nunits;
 
-    call_kernel(
-        cl, act,
-        1, NULL, &work_size, NULL, 0, NULL, NULL,
-        // Args, all activaitons take a single input so I can generalise
-        &pre_act_values_clmem,
-        &values_clmem);
+    switch (act){
+    case softmax:
+        call_kernel(cl, softmax_sum,
+            1, NULL, &bsize_s, NULL, 0, NULL, NULL,
+            // Args
+            nunits, 
+            &softmax_sum_clmem,
+            &pre_act_values_clmem);
+
+        call_kernel(cl, softmax,
+            1, NULL, &work_size, &nunits_s, 0, NULL, NULL,
+            // Args
+            &softmax_sum_clmem,
+            &pre_act_values_clmem,
+            &values_clmem);
+        
+        break;
+    
+    case ReLU:
+    case leaky_ReLU:
+        call_kernel(
+            cl, act,
+            1, NULL, &work_size, NULL, 0, NULL, NULL,
+            // Args,
+            &pre_act_values_clmem,
+            &values_clmem);
+
+        break;
+    }
 
     clFinish(cl->command_queue);
 }
@@ -117,11 +145,24 @@ void Dense::connect(Layer* prev){
     nweights    = prev_nunits * nunits;
 
     weights      = new float[nweights];
-    weights_grad = new float[nweights];
 
     // Init weights with glorot
-    float half_range = sqrtf(6.0 / (prev_nunits + nunits));
-    float range      = 2.0f * half_range;
+    float half_range;
+    float range;
+    switch(act){
+    case ReLU:
+    case leaky_ReLU:
+        // Xavier initlisation
+        half_range = sqrtf(6.0 / (prev_nunits + nunits));
+        range      = 2.0f * half_range;
+        break;
+    
+    case softmax:
+        // Glorot initialisation
+        half_range = sqrt(3.0 / (prev_nunits + nunits));
+        range      = 2.0f * half_range;
+        break;
+    }
 
     for (int i = 0; i < nweights; i++)
         weights[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
@@ -210,6 +251,10 @@ void Dense::calc_value_grad(){
 }
 
 void Dense::calc_act_grad(){
+    // Softmax der is combined into cross entropy der
+    if (act == softmax)
+        return;
+
     size_t work_size = bsize * nunits; 
 
     call_kernel(

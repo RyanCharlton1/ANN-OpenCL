@@ -8,16 +8,9 @@
 class Layer{
 protected:
     float* values  = nullptr;
-    float* pre_act = nullptr;
     float* weights = nullptr;
     float* bias    = nullptr;  
     bool   has_bias;
-
-    float* values_grad  = nullptr;
-    float* act_grad     = nullptr;
-    float* loss_grad    = nullptr;
-    float* weights_grad = nullptr;
-    //float* bias_grad    = nullptr;
 
     int nunits;
     int prev_nunits;
@@ -40,6 +33,7 @@ protected:
     cl_mem weights_grad_clmem;
     cl_mem act_grad_clmem;      // Activation/value differntial
     cl_mem bias_grad_clmem;
+    cl_mem softmax_sum_clmem;
 
 public:
     Layer(int nunits, Function act, bool bias);
@@ -48,10 +42,6 @@ public:
     int    get_nunits()  { return nunits; }
     float* get_values()  { return values; }
     float* get_weights() { return weights; }
-
-    float* get_values_grad() { return values_grad; }
-    float* get_act_grad()    { return act_grad; }
-    float* get_loss_grad()   { return loss_grad; }
 
     void set_cl(CLdata* cl) { this->cl = cl; }
 

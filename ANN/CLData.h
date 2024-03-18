@@ -5,7 +5,7 @@
 #include <iostream>
 #include <map>
 
-#define FUNCTION_COUNT 13
+#define FUNCTION_COUNT 17
 enum Function {
     mat_vec_mult,
     vec_vec_mult,
@@ -15,7 +15,9 @@ enum Function {
     bias_grad,
     ReLU, ReLU_der,
     leaky_ReLU, leaky_ReLU_der,
+    softmax, softmax_sum,
     MSE, MSE_der,
+    cross_entropy, cross_entropy_der,
     GrdDsc,
 };
 
