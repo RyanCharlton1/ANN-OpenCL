@@ -22,13 +22,17 @@ enum Function {
 };
 
 struct CLdata{
+    cl_int           device_count;
     cl_device_id*    device_list = nullptr;
     cl_context       context;
     cl_command_queue command_queue;
     cl_program       program;
 
     std::map<Function, cl_kernel> kernels;
+
+    void free();
 };
+
 
 const char* cl_errstr(cl_int error);
 void cl_print_err(const char* entry, cl_int error);

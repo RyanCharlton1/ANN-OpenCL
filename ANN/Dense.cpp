@@ -8,13 +8,13 @@
 void Dense::init_cl_mem(cl_context context, int bsize){
     this->bsize = bsize;
     values_clmem = alloc_buffer(
-        context, "values", bsize * nunits * sizeof(float), values,
-        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
+        context, "values", bsize * nunits * sizeof(float));
     
     weights_clmem = alloc_buffer(
         context, "weights", nweights * sizeof(float), weights, 
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
 
+    if (has_bias)
     bias_clmem = alloc_buffer(
         context, "bias", nunits * sizeof(float), bias,
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
@@ -34,9 +34,11 @@ void Dense::init_cl_mem(cl_context context, int bsize){
     act_grad_clmem = alloc_buffer(
         context, "act_diff_clmem", bsize * nunits * sizeof(float));
 
+    if (has_bias)
     bias_grad_clmem = alloc_buffer(
         context, "bias_grad_clmem", nunits * sizeof(float));
 
+    if (act == softmax)
     softmax_sum_clmem = alloc_buffer(
         context, "softmax_sum_clmem", bsize * sizeof(float));
 
@@ -45,13 +47,20 @@ void Dense::init_cl_mem(cl_context context, int bsize){
 void Dense::free_cl_mem(){
     clReleaseMemObject(values_clmem);
     clReleaseMemObject(weights_clmem);
-    clReleaseMemObject(bias_clmem);
     clReleaseMemObject(pre_act_values_clmem);
 
     clReleaseMemObject(values_grad_clmem);
     clReleaseMemObject(loss_grad_clmem);
     clReleaseMemObject(weights_grad_clmem);
     clReleaseMemObject(act_grad_clmem);
+    
+    if (has_bias){
+        clReleaseMemObject(bias_clmem);
+        clReleaseMemObject(bias_grad_clmem);
+    }
+
+    if (act == softmax)
+        clReleaseMemObject(softmax_sum_clmem);
 }
 
 void Dense::cl_to_host_values() {

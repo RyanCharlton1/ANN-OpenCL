@@ -87,8 +87,21 @@ void cl_print_err(const char* entry, cl_int error){
         std::cout << buffer << std::endl;
 }
 
+void CLdata::free(){
+    clReleaseCommandQueue(command_queue);
+    clReleaseContext(context);
+    clReleaseProgram(program);
+
+    delete[] device_list;
+}
+
 cl_mem alloc_buffer(cl_context context, const char* name, 
     size_t size, void* data, cl_mem_flags flag){
+
+    if (size < 1){
+        std::cout << name << " invalid size" << std::endl;
+        return NULL;
+    }
 
     cl_int status;
     cl_mem buffer = clCreateBuffer(context, flag, size, data, &status);

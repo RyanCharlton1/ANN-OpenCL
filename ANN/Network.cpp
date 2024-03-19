@@ -26,6 +26,7 @@ Network::Network(int ninput){
     this->ninput = ninput;
     // Activation doesn't matter as it will never update()
     input = new Dense(ninput, ReLU);
+    
 
     // Set up OpenCL to be called later
     // Get platform and device info 
@@ -49,7 +50,7 @@ Network::Network(int ninput){
     cl_print_err("Get device count:\t", status);
 
     cl.device_list = new cl_device_id[num_devices]();
-
+    
     status = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_ALL, num_devices,
         cl.device_list, NULL);
     cl_print_err("Get device ids:\t\t", status);
@@ -103,6 +104,10 @@ Network::Network(int ninput){
 }
 
 Network::~Network(){
+    for (Layer* l : layers)
+        delete l;
+    
+    cl.free();
     delete input;
 }
 
@@ -174,10 +179,9 @@ void Network::cl_to_host(){
 // Inits a read only cl buffer with the input data in
 void Network::set_input(float* data, int dsize){
     //std::memcpy(input->get_values(), data, dsize * sizeof(float));
-    cl_event finished;
     clEnqueueWriteBuffer(
         cl.command_queue, *input->get_values_clmem(), CL_TRUE, 0, 
-        dsize * sizeof(float), data, 0, NULL, &finished);
+        dsize * sizeof(float), data, 0, NULL, NULL);
     clFinish(cl.command_queue);
 }
 
@@ -271,6 +275,7 @@ void Network::calc_loss(int bsize){
     for (int i = 0; i < global_size; i++)
         l += loss_arr[i];
 
+    delete[] loss_arr;
     std::cout << "Loss: " << l << std::endl;
 }
 
@@ -351,7 +356,6 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
     input->init_cl_mem(cl.context, bsize);
     for (Layer* layer : layers)
         layer->init_cl_mem(cl.context, bsize);
-
     
     for (int e = 0; e < epochs; e++){
         for (int b = 0; b < batches; b++){
@@ -364,6 +368,7 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
 
     // OpenCL free mem
     free_clmem();
+    input->free_cl_mem();
     for (Layer* layer: layers)
         layer->free_cl_mem();
 }

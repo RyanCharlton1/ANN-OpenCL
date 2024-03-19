@@ -12,9 +12,9 @@ protected:
     float* bias    = nullptr;  
     bool   has_bias;
 
-    int nunits;
-    int prev_nunits;
-    int nweights;
+    int nunits      = 0;
+    int prev_nunits = 0;
+    int nweights    = 0;
 
     Layer *prev;
 

@@ -5,7 +5,7 @@ Layer::Layer(int nunits, Function act, bool bias){
     this->has_bias = bias;
     this->act      = act;
 
-    values  = new float[nunits];
+    values = new float[nunits];
 
     if (bias) this->bias = new float[nunits];
 }

@@ -27,6 +27,6 @@ int main(){
     n.fit(in, 1, out, 1, 20, 5, 5);
 
     std::cout << n.to_string() << std::endl;
-    std::cout << n.trace() << std::endl;
+    std::cout << n.trace()     << std::endl;
     return 0;
 }
