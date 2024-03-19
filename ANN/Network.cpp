@@ -4,6 +4,9 @@
 #include <fstream>
 #include <sstream>
 #include <cstring>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
 #include <stdlib.h>
 
 void Network::create_kernel(Function func){
@@ -217,7 +220,7 @@ float* Network::calc(float* data, int dsize){
     return get_output();
 }
 
-void Network::calc_loss(int bsize){
+float Network::calc_loss(int bsize){
     Layer* out_layer   = get_output_layer();
     size_t bsize_s     = bsize;
     size_t global_size = bsize_s * out_layer->get_nunits();
@@ -276,7 +279,8 @@ void Network::calc_loss(int bsize){
         l += loss_arr[i];
 
     delete[] loss_arr;
-    std::cout << "Loss: " << l << std::endl;
+    //std::cout << "Loss: " << l;
+    return l;
 }
 
 void Network::calc_output_value_grad(int dsize){
@@ -299,7 +303,7 @@ void Network::calc_output_value_grad(int dsize){
     clFinish(cl.command_queue);
 }
 
-void Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
+float Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
                            int bsize){
 
     // Feed forward whole batch 
@@ -307,7 +311,7 @@ void Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
     // Send expected results to cl_mem
     host_to_cl_expected(exp, esize * bsize);
     // Calculate loss 
-    calc_loss(bsize);
+    float l = calc_loss(bsize);
 
     // Calculate value gradient at last layer by multiplying its
     // act gradient by loss gradient, dL/dy = dL/dA * dA/dy
@@ -335,6 +339,8 @@ void Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
         layer->optimise(opt, learn_rate);
 
     clFinish(cl.command_queue);
+
+    return l;
 }
     
 // Train the network on provided data using expected results
@@ -357,11 +363,52 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
     for (Layer* layer : layers)
         layer->init_cl_mem(cl.context, bsize);
     
+    std::cout << std::fixed << std::setprecision(2);
     for (int e = 0; e < epochs; e++){
+
+        auto t_estart = std::chrono::high_resolution_clock::now();
+        
         for (int b = 0; b < batches; b++){
-            fit_batch_cl(&data[dsize * bsize * b], dsize,
+            auto t_bstart = std::chrono::high_resolution_clock::now();
+        
+            float l = fit_batch_cl(&data[dsize * bsize * b], dsize,
                       &exp[esize * bsize * b], esize, bsize);
+
+            auto t_bend = std::chrono::high_resolution_clock::now();
+        
+            // Print progress info
+
+            std::cout << "\r" << b+1 << "/" << batches;
+            
+            // Progress bar
+            float ratio = (float)(b+1) / (float)batches;
+            int   bars  = ratio * 20;
+
+            std::cout << '[';
+            for (int i = 0; i < bars; i++)
+                std::cout << '=';
+
+            std::cout << '>';
+            for (int i = 0; i < 20 - bars; i++)
+                std::cout << ' ';
+
+            std::cout << ']';
+
+            std::cout << " loss: " << l;
+            
+            // Time 
+            std::cout << "\t batch time: ";
+            std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(t_bend - t_bstart).count();
+            
+            auto t_now = std::chrono::high_resolution_clock::now();
+
+            std::cout << "\tms, epoch time: ";
+            std::cout << std::chrono::duration<double>(t_now - t_estart).count();
+            std::cout << "s";
+
+            fflush(NULL);
         }
+        std::cout << std::endl;
     }
 
     cl_to_host();

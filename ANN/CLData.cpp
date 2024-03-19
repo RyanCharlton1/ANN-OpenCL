@@ -99,7 +99,7 @@ cl_mem alloc_buffer(cl_context context, const char* name,
     size_t size, void* data, cl_mem_flags flag){
 
     if (size < 1){
-        std::cout << name << " invalid size" << std::endl;
+        //std::cout << name << " invalid size" << std::endl;
         return NULL;
     }
 

@@ -56,13 +56,15 @@ public:
     // Init cl mem, feed forward, return pointer to output values
     float* calc(float* data, int dsize); 
     // Calculate dL/dA at the final layer
-    void calc_loss(int dsize);
+    float calc_loss(int dsize);
     // Calculate dL/dy by multiplying dL/dA * dA/dy
     void calc_output_value_grad(int dsize);
 
-    void fit_batch_cl(float* data, int dsize, float* exp, int esize, int bsize);
+    float fit_batch_cl(float* data, int dsize, float* exp, int esize, int bsize);
     void fit(float* data, int dsize, float* exp, int esize,
              int batches=1, int bsize=1, int epochs=1);
+
+    void evaluate(float* test, int tsize, float* exp, int esize, int count);
 
     std::string to_string();
     std::string trace();

@@ -17,8 +17,9 @@ int main(){
     for (int i = 0; i < d.label_count; i++)
         label_onehot[i * 10 + d.labels[i]] = 1.0f;
     
+    // 10k instances, save 1k for test set 
     n.fit(d.data, d.data_size, label_onehot, 10, 
-        d.data_count / BATCHSIZE, BATCHSIZE, 5);
+        9000 / BATCHSIZE, BATCHSIZE, 5);
 
     float* output = n.calc(d.data, IMAGESIZE);
 
