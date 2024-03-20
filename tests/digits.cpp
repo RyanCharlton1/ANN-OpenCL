@@ -1,8 +1,14 @@
 #include <ANN/Network.h>
 #include <Data/digit_load.hpp>
 
-#define IMAGESIZE 28*28
+#define IMAGESIZE  28*28
+#define IMAGECOUNT 10000
+#define TRAINSIZE  9000
+#define TESTSIZE   IMAGECOUNT - TRAINSIZE
+#define LABELSIZE  10
+
 #define BATCHSIZE 100
+#define EPOCHS    5
 
 int main(){
     Network n(IMAGESIZE);
@@ -18,17 +24,13 @@ int main(){
         label_onehot[i * 10 + d.labels[i]] = 1.0f;
     
     // 10k instances, save 1k for test set 
-    n.fit(d.data, d.data_size, label_onehot, 10, 
-        9000 / BATCHSIZE, BATCHSIZE, 5);
+    n.fit(d.data, IMAGESIZE, label_onehot, LABELSIZE, 
+        TRAINSIZE / BATCHSIZE, BATCHSIZE, EPOCHS);
 
-    float* output = n.calc(d.data, IMAGESIZE);
+    float* test_data   = &d.data[TRAINSIZE * IMAGESIZE];
+    float* test_labels = &label_onehot[TRAINSIZE * LABELSIZE];
 
-    print_image(d.data);
-
-    std::cout << "[";
-    for (int i = 0; i < 10; i++)
-        std::cout << " " << output[i];
-    std::cout << "]" << std::endl;
+    n.evaluate(test_data, IMAGESIZE, test_labels, LABELSIZE, TESTSIZE);
 
     delete[] label_onehot;
 }

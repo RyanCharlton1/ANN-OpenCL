@@ -7,6 +7,8 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>
+#include <algorithm>
+#include <cmath>
 #include <stdlib.h>
 
 void Network::create_kernel(Function func){
@@ -364,6 +366,9 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
         layer->init_cl_mem(cl.context, bsize);
     
     std::cout << std::fixed << std::setprecision(2);
+    
+    int l = floor(log10((float)batches));
+    std::cout << std::setw(l);
     for (int e = 0; e < epochs; e++){
 
         auto t_estart = std::chrono::high_resolution_clock::now();
@@ -377,8 +382,7 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
             auto t_bend = std::chrono::high_resolution_clock::now();
         
             // Print progress info
-
-            std::cout << "\r" << b+1 << "/" << batches;
+            std::cout << "\r" << b+1 << "/" << batches << "\t";
             
             // Progress bar
             float ratio = (float)(b+1) / (float)batches;
@@ -397,12 +401,12 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
             std::cout << " loss: " << l;
             
             // Time 
-            std::cout << "\t batch time: ";
+            std::cout << " batch time: ";
             std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(t_bend - t_bstart).count();
             
             auto t_now = std::chrono::high_resolution_clock::now();
 
-            std::cout << "\tms, epoch time: ";
+            std::cout << " ms epoch time: ";
             std::cout << std::chrono::duration<double>(t_now - t_estart).count();
             std::cout << "s";
 
@@ -418,6 +422,53 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
     input->free_cl_mem();
     for (Layer* layer: layers)
         layer->free_cl_mem();
+}
+
+void Network::evaluate(float* test, int tsize, float* exp, int esize,
+                       int count){
+
+    int classify_correct = 0;
+
+    std::cout << std::fixed << std::setprecision(2);
+    // TODO: optimise this if necersarry
+    for (int i = 0; i < count; i++){
+        
+        // Print progress bar
+        std::cout << "\r" << i+1 << "/" << count;
+        
+        float ratio = (float)(i+1) / (float)count;
+        int   bars  = ratio * 20;
+
+        std::cout << '[';
+        for (int i = 0; i < bars; i++)
+            std::cout << '=';
+
+        std::cout << '>';
+        for (int i = 0; i < 20 - bars; i++)
+            std::cout << ' ';
+
+        std::cout << ']';
+
+        // Calculate instance's prediction
+        float* prediction = calc(test + i * tsize, tsize);
+
+        switch (loss){
+        case cross_entropy: {
+            auto max_it = std::max_element(prediction, &prediction[esize]);
+            int  max_i  = std::distance(prediction, max_it);
+
+            if (exp[esize * i + max_i] == 1.0f)
+                classify_correct += 1;
+
+            std::cout << " acc: " << (float)classify_correct / (float)i;
+            } break;
+
+        case MSE:
+            //std::cout << "tbc" << std::endl;
+            break;
+        }
+    }
+    std::cout << std::endl;
 }
 
 std::string Network::to_string(){
