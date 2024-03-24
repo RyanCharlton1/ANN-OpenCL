@@ -61,7 +61,7 @@ public:
     virtual void cl_to_host_values() {};
     virtual void cl_to_host_weights() {};
     // Create cl mem afor values and weights and store weights
-    virtual void init_cl_mem(cl_context context, Function opt, int bsize=1) {};
+    virtual void init_cl_mem(Function opt, int bsize=1) {};
     virtual void free_cl_mem() {};
 
     virtual void zero_adam_avgs() {};

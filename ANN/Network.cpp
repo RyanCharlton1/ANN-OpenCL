@@ -206,9 +206,9 @@ float* Network::calc(float* data, int dsize){
     
     // OpenCL init mem 
     init_clmem(1);
-    input->init_cl_mem(cl.context, opt, 1);
+    input->init_cl_mem(opt, 1);
     for (Layer* layer : layers)
-        layer->init_cl_mem(cl.context, opt, 1);
+        layer->init_cl_mem(opt, 1);
 
     calc_cl(data, dsize);
 
@@ -362,9 +362,9 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
 
     // OpenCL init mem 
     init_clmem(bsize);
-    input->init_cl_mem(cl.context, opt, bsize);
+    input->init_cl_mem(opt, bsize);
     for (Layer* layer : layers)
-        layer->init_cl_mem(cl.context, opt, bsize);
+        layer->init_cl_mem(opt, bsize);
     
     std::cout << std::fixed << std::setprecision(2);
     
@@ -381,13 +381,10 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
         }
 
         for (int b = 0; b < batches; b++){
-            auto t_bstart = std::chrono::high_resolution_clock::now();
-        
+    
             float l = fit_batch_cl(&data[dsize * bsize * b], dsize,
                       &exp[esize * bsize * b], esize, bsize, b);
 
-            auto t_bend = std::chrono::high_resolution_clock::now();
-        
             // Print progress info
             std::cout << "\r" << b+1 << "/" << batches << "\t";
             

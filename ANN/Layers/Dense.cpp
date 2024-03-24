@@ -5,56 +5,56 @@
 #include <cstring>
 #include <string>
 
-void Dense::init_cl_mem(cl_context context, Function opt, int bsize){
+void Dense::init_cl_mem(Function opt, int bsize){
     this->bsize = bsize;
     values_clmem = alloc_buffer(
-        context, "values", bsize * nunits * sizeof(float));
+        cl->context, "values", bsize * nunits * sizeof(float));
     
     weights_clmem = alloc_buffer(
-        context, "weights", nweights * sizeof(float), weights, 
+        cl->context, "weights", nweights * sizeof(float), weights, 
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
 
     if (has_bias)
     bias_clmem = alloc_buffer(
-        context, "bias", nunits * sizeof(float), bias,
+        cl->context, "bias", nunits * sizeof(float), bias,
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
     
     pre_act_values_clmem = alloc_buffer(
-        context, "pre act values", bsize * nunits * sizeof(float));
+        cl->context, "pre act values", bsize * nunits * sizeof(float));
 
     values_grad_clmem = alloc_buffer(
-        context, "values_grad_clmem", bsize * nunits * sizeof(float));
+        cl->context, "values_grad_clmem", bsize * nunits * sizeof(float));
 
     loss_grad_clmem = alloc_buffer(
-        context, "loss_grad_clmem", bsize * nunits * sizeof(float));
+        cl->context, "loss_grad_clmem", bsize * nunits * sizeof(float));
 
     weights_grad_clmem = alloc_buffer(
-        context, "weights_grad_clmem", nweights * sizeof(float));
+        cl->context, "weights_grad_clmem", nweights * sizeof(float));
 
     act_grad_clmem = alloc_buffer(
-        context, "act_diff_clmem", bsize * nunits * sizeof(float));
+        cl->context, "act_diff_clmem", bsize * nunits * sizeof(float));
 
     if (has_bias)
     bias_grad_clmem = alloc_buffer(
-        context, "bias_grad_clmem", nunits * sizeof(float));
+        cl->context, "bias_grad_clmem", nunits * sizeof(float));
 
     if (act == softmax)
     softmax_sum_clmem = alloc_buffer(
-        context, "softmax_sum_clmem", bsize * sizeof(float));
+        cl->context, "softmax_sum_clmem", bsize * sizeof(float));
 
     if (opt == adam){
     adam_weight_avg_clmem = alloc_buffer(
-        context, "adam_avg_clmem", nweights * sizeof(float));
+        cl->context, "adam_avg_clmem", nweights * sizeof(float));
 
     adam_weight_square_avg_clmem = alloc_buffer(
-        context, "adam_square_clmem", nweights * sizeof(float)); 
+        cl->context, "adam_square_clmem", nweights * sizeof(float)); 
 
     if (has_bias){
     adam_bias_avg_clmem = alloc_buffer(
-        context, "adam_bias_avg_clmem", nunits * sizeof(float));
+        cl->context, "adam_bias_avg_clmem", nunits * sizeof(float));
 
     adam_bias_square_avg_clmem = alloc_buffer(
-        context, "adam_bias_square_avg_clmem", nunits * sizeof(float));
+        cl->context, "adam_bias_square_avg_clmem", nunits * sizeof(float));
     }
     }
     

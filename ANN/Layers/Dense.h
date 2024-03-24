@@ -10,7 +10,7 @@ public:
 
 
     // Create cl mem afor values and weights and store weights
-    void init_cl_mem(cl_context context, Function opt, int bsize=1) override;
+    void init_cl_mem(Function opt, int bsize=1) override;
     void free_cl_mem() override;
 
     void zero_adam_avgs() override;
