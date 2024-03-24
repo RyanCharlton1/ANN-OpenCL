@@ -122,3 +122,5 @@ $\hat{v_t} = \frac{v_t}{1-\beta_2^t}$
 $w_{t+1} = w_t - \alpha \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}$
 
 For some very small $\epsilon$ to stop to stop the possibility of division by zero.
+
+Reference: https://arxiv.org/pdf/1412.6980.pdf
