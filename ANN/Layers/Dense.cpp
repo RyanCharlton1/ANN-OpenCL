@@ -125,9 +125,9 @@ void Dense::calc_pre_act_values(){
         1, NULL, &work_size, &local_work_size, 0, NULL, NULL,
         // Args
         prev_nunits,
-        &weights_clmem,
+        weights_clmem,
         prev->get_values_clmem(),
-        &pre_act_values_clmem);
+        pre_act_values_clmem);
 
     clFinish(cl->command_queue);
 }
@@ -140,8 +140,8 @@ void Dense::add_bias(){
         cl, vec_vec_add_inplace,
         1, NULL, &work_size, &local_work_size, 0, NULL, NULL,
         // Args
-        &pre_act_values_clmem,
-        &bias_clmem);
+        pre_act_values_clmem,
+        bias_clmem);
     
     clFinish(cl->command_queue);
 }
@@ -157,15 +157,15 @@ void Dense::apply_act(){
             1, NULL, &bsize_s, NULL, 0, NULL, NULL,
             // Args
             nunits, 
-            &softmax_sum_clmem,
-            &pre_act_values_clmem);
+            softmax_sum_clmem,
+            pre_act_values_clmem);
 
         call_kernel(cl, softmax,
             1, NULL, &work_size, &nunits_s, 0, NULL, NULL,
             // Args
-            &softmax_sum_clmem,
-            &pre_act_values_clmem,
-            &values_clmem);
+            softmax_sum_clmem,
+            pre_act_values_clmem,
+            values_clmem);
         
         break;
     
@@ -175,8 +175,8 @@ void Dense::apply_act(){
             cl, act,
             1, NULL, &work_size, NULL, 0, NULL, NULL,
             // Args,
-            &pre_act_values_clmem,
-            &values_clmem);
+            pre_act_values_clmem,
+            values_clmem);
 
         break;
     }
@@ -227,8 +227,8 @@ void Dense::optimise(Function optimiser, float learn_rate, int instance){
                 1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
-                &weights_clmem,
-                &weights_grad_clmem);
+                weights_clmem,
+                weights_grad_clmem);
 
 
             if (has_bias)
@@ -236,8 +236,8 @@ void Dense::optimise(Function optimiser, float learn_rate, int instance){
                     1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                     // Args
                     learn_rate,
-                    &bias_clmem,
-                    &bias_grad_clmem);
+                    bias_clmem,
+                    bias_grad_clmem);
             
             break; 
         
@@ -246,10 +246,10 @@ void Dense::optimise(Function optimiser, float learn_rate, int instance){
                 1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
-                &weights_clmem,
-                &weights_grad_clmem,
-                &adam_weight_avg_clmem,
-                &adam_weight_square_avg_clmem,
+                weights_clmem,
+                weights_grad_clmem,
+                adam_weight_avg_clmem,
+                adam_weight_square_avg_clmem,
                 instance);
 
             if (has_bias){
@@ -257,10 +257,10 @@ void Dense::optimise(Function optimiser, float learn_rate, int instance){
                     1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                     // Args
                     learn_rate,
-                    &bias_clmem,
-                    &bias_grad_clmem,
-                    &adam_bias_avg_clmem,
-                    &adam_bias_square_avg_clmem,
+                    bias_clmem,
+                    bias_grad_clmem,
+                    adam_bias_avg_clmem,
+                    adam_bias_square_avg_clmem,
                     instance);
             }
             break;
@@ -268,7 +268,7 @@ void Dense::optimise(Function optimiser, float learn_rate, int instance){
 }
 
 void Dense::calc_weight_grad(){
-    cl_mem* prev_values_clmem = prev->get_values_clmem();
+    cl_mem prev_values_clmem = prev->get_values_clmem();
 
     size_t global_size = nweights;
     size_t local_size  = prev_nunits;
@@ -277,9 +277,9 @@ void Dense::calc_weight_grad(){
         1, NULL, &global_size, &local_size, 0, NULL, NULL,
         // Args
         bsize,
-        &values_grad_clmem,
+        values_grad_clmem,
         prev_values_clmem,
-        &weights_grad_clmem);
+        weights_grad_clmem);
 
     if (has_bias){
         global_size = nunits;
@@ -289,8 +289,8 @@ void Dense::calc_weight_grad(){
             // Args
             bsize,
             nunits,
-            &values_grad_clmem,
-            &bias_grad_clmem);
+            values_grad_clmem,
+            bias_grad_clmem);
     }
 }
 
@@ -302,8 +302,8 @@ void Dense::calc_loss_grad(){
         1, NULL, &global_size, &local_size, 0, NULL, NULL,
         // Args
         nunits,
-        &weights_clmem,
-        &values_grad_clmem,
+        weights_clmem,
+        values_grad_clmem,
         prev->get_loss_grad_clmem());    
 
     clFinish(cl->command_queue);
@@ -315,9 +315,9 @@ void Dense::calc_value_grad(){
     call_kernel(cl, vec_vec_mult,
         1, NULL, &global_size, NULL, 0, NULL, NULL,
         // Args
-        &loss_grad_clmem,
-        &act_grad_clmem,
-        &values_grad_clmem);
+        loss_grad_clmem,
+        act_grad_clmem,
+        values_grad_clmem);
 
     clFinish(cl->command_queue);
 }
@@ -333,8 +333,8 @@ void Dense::calc_act_grad(){
         cl, derivative(act),
         1, NULL, &work_size, NULL, 0, NULL, NULL,
         // Args, all activaitons take a single input so I can generalise
-        &pre_act_values_clmem,
-        &act_grad_clmem);
+        pre_act_values_clmem,
+        act_grad_clmem);
 
     clFinish(cl->command_queue);
 }

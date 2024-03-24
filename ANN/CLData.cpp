@@ -211,9 +211,9 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
     cl_kernel   kernel = cl->kernels[fun];
     const char* types  = function_arg_string(fun);
     
-    int     n;
-    float   f;
-    cl_mem* c;
+    int    n;
+    float  f;
+    cl_mem c;
 
     va_start(args, event);
 
@@ -237,8 +237,8 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
             break;
 
         case 'c':
-            c      = va_arg(args, cl_mem*);
-            status = clSetKernelArg(kernel, i, sizeof(cl_mem), c);
+            c      = va_arg(args, cl_mem);
+            status = clSetKernelArg(kernel, i, sizeof(cl_mem), &c);
 
             cl_print_err("call_kernel cl_mem arg", status);
             break;

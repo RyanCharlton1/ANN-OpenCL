@@ -51,12 +51,12 @@ public:
 
     void set_cl(CLdata* cl) { this->cl = cl; }
 
-    cl_mem* get_values_clmem()  { return &values_clmem; }
-    cl_mem* get_weights_clmem() { return &weights_clmem; }
+    cl_mem get_values_clmem()  { return values_clmem; }
+    cl_mem get_weights_clmem() { return weights_clmem; }
 
-    cl_mem* get_values_grad_clmem() { return &values_grad_clmem; }
-    cl_mem* get_loss_grad_clmem()   { return &loss_grad_clmem; }
-    cl_mem* get_act_grad_clmem()    { return &act_grad_clmem; }
+    cl_mem get_values_grad_clmem() { return values_grad_clmem; }
+    cl_mem get_loss_grad_clmem()   { return loss_grad_clmem; }
+    cl_mem get_act_grad_clmem()    { return act_grad_clmem; }
 
     virtual void cl_to_host_values() {};
     virtual void cl_to_host_weights() {};

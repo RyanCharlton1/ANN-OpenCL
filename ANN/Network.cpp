@@ -185,7 +185,7 @@ void Network::cl_to_host(){
 void Network::set_input(float* data, int dsize){
     //std::memcpy(input->get_values(), data, dsize * sizeof(float));
     clEnqueueWriteBuffer(
-        cl.command_queue, *input->get_values_clmem(), CL_TRUE, 0, 
+        cl.command_queue, input->get_values_clmem(), CL_TRUE, 0, 
         dsize * sizeof(float), data, 0, NULL, NULL);
     clFinish(cl.command_queue);
 }
@@ -233,16 +233,16 @@ float Network::calc_loss(int bsize){
         call_kernel(&cl, MSE, 
             1, NULL, &global_size, NULL, 0, NULL, NULL,
             // Args
-            &expected_clmem,
+            expected_clmem,
             out_layer->get_values_clmem(),
-            &loss_clmem);
+            loss_clmem);
 
         call_kernel(&cl, MSE_der,
             1, NULL, &global_size, &bsize_s, 0, NULL, NULL,
             // Args
-            &expected_clmem,
+            expected_clmem,
             out_layer->get_values_clmem(),
-            &loss_grad_clmem);
+            loss_grad_clmem);
 
         break;
 
@@ -250,14 +250,14 @@ float Network::calc_loss(int bsize){
         call_kernel(&cl, cross_entropy,
             1, NULL, &global_size, &bsize_s, 0, NULL, NULL,
             // Args
-            &expected_clmem,
+            expected_clmem,
             out_layer->get_values_clmem(),
-            &loss_clmem);
+            loss_clmem);
 
         call_kernel(&cl, cross_entropy_der,
             1, NULL, &global_size, NULL, 0, NULL, NULL,
             // Args
-            &expected_clmem,
+            expected_clmem,
             out_layer->get_values_clmem(),
             out_layer->get_values_grad_clmem());
 
@@ -299,7 +299,7 @@ void Network::calc_output_value_grad(int dsize){
     call_kernel(&cl, vec_vec_mult,
         1, NULL, &work_size, NULL, 0, NULL, NULL,
         // Args
-        &loss_grad_clmem,
+        loss_grad_clmem,
         out_layer->get_act_grad_clmem(),
         out_layer->get_values_grad_clmem());
 
