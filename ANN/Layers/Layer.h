@@ -33,7 +33,13 @@ protected:
     cl_mem weights_grad_clmem;
     cl_mem act_grad_clmem;      // Activation/value differntial
     cl_mem bias_grad_clmem;
+
     cl_mem softmax_sum_clmem;
+
+    cl_mem adam_weight_avg_clmem;
+    cl_mem adam_weight_square_avg_clmem;
+    cl_mem adam_bias_avg_clmem;
+    cl_mem adam_bias_square_avg_clmem;
 
 public:
     Layer(int nunits, Function act, bool bias);
@@ -55,8 +61,10 @@ public:
     virtual void cl_to_host_values() {};
     virtual void cl_to_host_weights() {};
     // Create cl mem afor values and weights and store weights
-    virtual void init_cl_mem(cl_context context, int bsize=1) {};
+    virtual void init_cl_mem(cl_context context, Function opt, int bsize=1) {};
     virtual void free_cl_mem() {};
+
+    virtual void zero_adam_avgs() {};
 
     // Calc new values by feed forward
     void update();
@@ -68,7 +76,7 @@ public:
     virtual void apply_act() {};
     // Connect Layer to prev during Network compilation
     virtual void connect(Layer* prev) {};
-    virtual void optimise(Function optimiser, float learn_rate) {};
+    virtual void optimise(Function optimiser, float learn_rate, int instance) {};
     // Accumulate weight grads dL/dw by multilpying dL/dy and dy/dw(z)
     // and bias dL/db as dL/dy * dy/db(1)
     virtual void calc_weight_grad() {};

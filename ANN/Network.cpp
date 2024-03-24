@@ -206,9 +206,9 @@ float* Network::calc(float* data, int dsize){
     
     // OpenCL init mem 
     init_clmem(1);
-    input->init_cl_mem(cl.context, 1);
+    input->init_cl_mem(cl.context, opt, 1);
     for (Layer* layer : layers)
-        layer->init_cl_mem(cl.context, 1);
+        layer->init_cl_mem(cl.context, opt, 1);
 
     calc_cl(data, dsize);
 
@@ -302,11 +302,12 @@ void Network::calc_output_value_grad(int dsize){
         &loss_grad_clmem,
         out_layer->get_act_grad_clmem(),
         out_layer->get_values_grad_clmem());
+
     clFinish(cl.command_queue);
 }
 
 float Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
-                           int bsize){
+                           int bsize, int instance){
 
     // Feed forward whole batch 
     calc_cl(data, dsize * bsize);
@@ -338,7 +339,7 @@ float Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
     }
 
     for (Layer* layer : layers)
-        layer->optimise(opt, learn_rate);
+        layer->optimise(opt, learn_rate, instance);
 
     clFinish(cl.command_queue);
 
@@ -361,9 +362,9 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
 
     // OpenCL init mem 
     init_clmem(bsize);
-    input->init_cl_mem(cl.context, bsize);
+    input->init_cl_mem(cl.context, opt, bsize);
     for (Layer* layer : layers)
-        layer->init_cl_mem(cl.context, bsize);
+        layer->init_cl_mem(cl.context, opt, bsize);
     
     std::cout << std::fixed << std::setprecision(2);
     
@@ -373,11 +374,17 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
 
         auto t_estart = std::chrono::high_resolution_clock::now();
         
+        // If adam optimsier, clear moving averages 
+        if (opt == adam){
+            for (Layer* l : layers)
+                l->zero_adam_avgs();
+        }
+
         for (int b = 0; b < batches; b++){
             auto t_bstart = std::chrono::high_resolution_clock::now();
         
             float l = fit_batch_cl(&data[dsize * bsize * b], dsize,
-                      &exp[esize * bsize * b], esize, bsize);
+                      &exp[esize * bsize * b], esize, bsize, b);
 
             auto t_bend = std::chrono::high_resolution_clock::now();
         
@@ -400,12 +407,12 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
 
             std::cout << " loss: " << l;
             
-            // Time 
-            std::cout << " batch time: ";
-            std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(t_bend - t_bstart).count();
-            
             auto t_now = std::chrono::high_resolution_clock::now();
 
+            // Time 
+            std::cout << " avg. batch time: ";
+            std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(t_now - t_estart).count() / (b+1);
+            
             std::cout << " ms epoch time: ";
             std::cout << std::chrono::duration<double>(t_now - t_estart).count();
             std::cout << "s";

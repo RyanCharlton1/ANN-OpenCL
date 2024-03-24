@@ -3,6 +3,18 @@ A general purpose ANN framework made with C++ OpenCL
 
 ## Activation Functions
 
+### (Leaky) ReLU
+
+Zeros negative values, but unchanged otherwise. Leaky multiplies by some $\epsilon$ to stop neurons 'dying' when they hit zero and can't be changed anymore.
+
+$r(z_i)=\max(z_i, \epsilon z_i) = \begin{cases}
+    z_i & \text{if} z_i > 0\\ \epsilon z_i & \text{otherwise}
+\end{cases}$
+
+$\frac{\partial r}{\partial z_i}=\begin{cases}
+    1 & \text{if} z_i > 0\\ \epsilon & \text{otherwise}
+\end{cases}$
+
 ### Softmax 
 Returns a vector summing to one, modelling probability
 
@@ -89,3 +101,24 @@ $\frac{\partial\mathcal{L}}{\partial z}= \sigma - y$
 
 ## Optimisers
 
+### Gradient Descent
+
+Compute the loss gradient $g$ for the given parameter and move in the opposite direction multiplied by some learning rate $\alpha$.
+
+$w_{t+1} = w_t - \alpha g_t$
+
+### ADAM
+
+Compute the exponential moving averages(parameterised by $\beta^1$ and $\beta^2$) for the loss gradient $g$, $m$, and its squared value $g^2$, $v$, these form a 'signal to noise' ratio. Using this the parameters can be updated less in sparser parameter spaces. The exponential moving averages are initialised at the zero vector, making initial estimates biased towards zero. To combat this introduce bias correction by dividing by $1-\beta^t$.
+
+$m_t = \beta_1 m_{t-1} - (1-\beta_1)g$
+
+$v_t = \beta_2 v_{t-1} - (1-\beta_2)g^2$
+
+$\hat{m_t} = \frac{m_t}{1-\beta_1^t}$
+
+$\hat{v_t} = \frac{v_t}{1-\beta_2^t}$
+
+$w_{t+1} = w_t - \alpha \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}$
+
+For some very small $\epsilon$ to stop to stop the possibility of division by zero.

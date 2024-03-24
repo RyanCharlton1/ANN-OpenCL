@@ -1,4 +1,4 @@
-#include <ANN/Layer.h>
+#include <ANN/Layers/Layer.h>
 
 Layer::Layer(int nunits, Function act, bool bias){
     this->nunits   = nunits;

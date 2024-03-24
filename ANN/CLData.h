@@ -5,7 +5,7 @@
 #include <iostream>
 #include <map>
 
-#define FUNCTION_COUNT 17
+#define FUNCTION_COUNT 18
 enum Function {
     mat_vec_mult,
     vec_vec_mult,
@@ -19,6 +19,7 @@ enum Function {
     MSE, MSE_der,
     cross_entropy, cross_entropy_der,
     GrdDsc,
+    adam,
 };
 
 struct CLdata{

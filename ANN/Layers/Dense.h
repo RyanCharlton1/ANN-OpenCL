@@ -1,6 +1,6 @@
 #pragma once 
 
-#include <ANN/Layer.h>
+#include <ANN/Layers/Layer.h>
 
 class Dense : public Layer{
 
@@ -10,8 +10,10 @@ public:
 
 
     // Create cl mem afor values and weights and store weights
-    void init_cl_mem(cl_context context, int bsize=1) override;
+    void init_cl_mem(cl_context context, Function opt, int bsize=1) override;
     void free_cl_mem() override;
+
+    void zero_adam_avgs() override;
 
     void cl_to_host_values() override;
     void cl_to_host_weights() override;
@@ -25,7 +27,7 @@ public:
     void apply_act() override;
     // Connect to prev Layer and init memory for Dense topology
     void connect(Layer* prev) override;
-    void optimise(Function optimiser, float learn_rate) override;
+    void optimise(Function optimiser, float learn_rate, int instance) override;
 
     // Calculate weight grad dL/dw by multilpying dL/dy * dy/dw(z)
     void calc_weight_grad() override;

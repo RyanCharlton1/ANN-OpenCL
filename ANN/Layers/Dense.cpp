@@ -1,11 +1,11 @@
-#include <ANN/Dense.h>
+#include <ANN/Layers/Dense.h>
 #include <ANN/CLData.h>
 
 #include <random>
 #include <cstring>
 #include <string>
 
-void Dense::init_cl_mem(cl_context context, int bsize){
+void Dense::init_cl_mem(cl_context context, Function opt, int bsize){
     this->bsize = bsize;
     values_clmem = alloc_buffer(
         context, "values", bsize * nunits * sizeof(float));
@@ -42,6 +42,22 @@ void Dense::init_cl_mem(cl_context context, int bsize){
     softmax_sum_clmem = alloc_buffer(
         context, "softmax_sum_clmem", bsize * sizeof(float));
 
+    if (opt == adam){
+    adam_weight_avg_clmem = alloc_buffer(
+        context, "adam_avg_clmem", nweights * sizeof(float));
+
+    adam_weight_square_avg_clmem = alloc_buffer(
+        context, "adam_square_clmem", nweights * sizeof(float)); 
+
+    if (has_bias){
+    adam_bias_avg_clmem = alloc_buffer(
+        context, "adam_bias_avg_clmem", nunits * sizeof(float));
+
+    adam_bias_square_avg_clmem = alloc_buffer(
+        context, "adam_bias_square_avg_clmem", nunits * sizeof(float));
+    }
+    }
+    
 }
 
 void Dense::free_cl_mem(){
@@ -61,6 +77,26 @@ void Dense::free_cl_mem(){
 
     if (act == softmax)
         clReleaseMemObject(softmax_sum_clmem);
+}
+
+void Dense::zero_adam_avgs(){
+    float zero = 0.0f;
+
+    clEnqueueFillBuffer(
+        cl->command_queue, adam_weight_avg_clmem, &zero, sizeof(float), 
+        0, nweights * sizeof(float), 0, NULL, NULL);   
+
+    clEnqueueFillBuffer(
+        cl->command_queue, adam_weight_square_avg_clmem, &zero, sizeof(float),
+        0, nweights * sizeof(float), 0, NULL, NULL);   
+
+    clEnqueueFillBuffer(
+        cl->command_queue, adam_bias_avg_clmem, &zero, sizeof(float), 
+        0, nunits * sizeof(float), 0, NULL, NULL);   
+
+    clEnqueueFillBuffer(
+        cl->command_queue, adam_bias_square_avg_clmem, &zero, sizeof(float),
+        0, nunits * sizeof(float), 0, NULL, NULL);  
 }
 
 void Dense::cl_to_host_values() {
@@ -181,7 +217,7 @@ void Dense::connect(Layer* prev){
             bias[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
 }
 
-void Dense::optimise(Function optimiser, float learn_rate){
+void Dense::optimise(Function optimiser, float learn_rate, int instance){
     size_t nweights_sizet = nweights;
     size_t nbias_sizet    = nunits;
 
@@ -203,6 +239,30 @@ void Dense::optimise(Function optimiser, float learn_rate){
                     &bias_clmem,
                     &bias_grad_clmem);
             
+            break; 
+        
+        case adam:
+            call_kernel(cl, adam, 
+                1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
+                // Args
+                learn_rate,
+                &weights_clmem,
+                &weights_grad_clmem,
+                &adam_weight_avg_clmem,
+                &adam_weight_square_avg_clmem,
+                instance);
+
+            if (has_bias){
+                call_kernel(cl, adam,
+                    1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
+                    // Args
+                    learn_rate,
+                    &bias_clmem,
+                    &bias_grad_clmem,
+                    &adam_bias_avg_clmem,
+                    &adam_bias_square_avg_clmem,
+                    instance);
+            }
             break;
     }
 }
@@ -212,6 +272,7 @@ void Dense::calc_weight_grad(){
 
     size_t global_size = nweights;
     size_t local_size  = prev_nunits;
+
     call_kernel(cl, weight_grad,
         1, NULL, &global_size, &local_size, 0, NULL, NULL,
         // Args
@@ -222,6 +283,7 @@ void Dense::calc_weight_grad(){
 
     if (has_bias){
         global_size = nunits;
+
         call_kernel(cl, bias_grad,
             1, NULL, &global_size, NULL, 0, NULL, NULL,
             // Args
@@ -249,6 +311,7 @@ void Dense::calc_loss_grad(){
 
 void Dense::calc_value_grad(){
     size_t global_size = bsize * nunits;
+
     call_kernel(cl, vec_vec_mult,
         1, NULL, &global_size, NULL, 0, NULL, NULL,
         // Args

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ANN/Layer.h>
-#include <ANN/Dense.h>
+#include <ANN/Layers/Layer.h>
+#include <ANN/Layers/Dense.h>
 #include <ANN/CLData.h>
 
 #include <CL/cl.h>
@@ -60,7 +60,8 @@ public:
     // Calculate dL/dy by multiplying dL/dA * dA/dy
     void calc_output_value_grad(int dsize);
 
-    float fit_batch_cl(float* data, int dsize, float* exp, int esize, int bsize);
+    float fit_batch_cl(float* data, int dsize, float* exp, int esize, 
+                       int bsize, int instance);
     void fit(float* data, int dsize, float* exp, int esize,
              int batches=1, int bsize=1, int epochs=1);
 

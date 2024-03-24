@@ -153,6 +153,8 @@ const char* function_to_string(Function f){
         return "cross_entropy_der";
     case GrdDsc:
         return "GrdDsc";
+    case adam:
+        return "adam";
     }
     return "error";
 }
@@ -193,6 +195,8 @@ const char* function_arg_string(Function f){
         return "ccc";
     case GrdDsc:
         return "fcc";
+    case adam:
+        return "fcccci";
     }
     return "error";
 }

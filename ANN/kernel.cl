@@ -1,4 +1,4 @@
-// #define DEBUG
+//#define DEBUG
 
 // [0, .. cols] [v1]
 // [..        ] [v2]
@@ -301,6 +301,40 @@ void GrdDsc(float  learn_rate,
     weights[i] -= learn_rate * grads[i];
 
 #ifdef DEBUG
-    printf("GrdDsc:%d: -= %f * %f\n", i, learn_rate, grads[i]);
+    printf("GrdDsc[%d]: -= %f * %f\n", i, learn_rate, grads[i]);
+#endif
+}
+
+// Adam optimiser, needs a separate clmem for average and squared average
+// t is the number instance from the current batch
+
+#define BETA1 0.9
+#define BETA2 0.999
+#define EPSILON 1e-6
+
+__kernel
+void adam(float  learn_rate,
+ __global float* weights,
+ __global float* grads,
+ __global float* avgs,
+ __global float* square_avgs,
+          int    t){
+
+    int i = get_global_id(0);
+
+    t++;
+
+    avgs[i]        = BETA1 * avgs[i]        + (1.f - BETA1) * grads[i]; 
+    square_avgs[i] = BETA2 * square_avgs[i] + (1.f - BETA2) * grads[i] * grads[i];
+
+    float corrected_avg        = avgs[i]        / (1.f - pown(BETA1, t));
+    float corrected_square_avg = square_avgs[i] / (1.f - pown(BETA2, t));
+
+    weights[i] -= learn_rate * corrected_avg / (sqrt(corrected_square_avg) + EPSILON);
+
+#ifdef DEBUG
+    printf("ADAM[%d]: -= %f * %f / (sqrt(%f) + %f) : %f, %f\n", 
+        i, learn_rate, corrected_avg, corrected_square_avg, EPSILON,
+        avgs[i], square_avgs[i]);
 #endif
 }
