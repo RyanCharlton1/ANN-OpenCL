@@ -159,6 +159,7 @@ void Dense::apply_act(){
             nunits, 
             softmax_sum_clmem,
             pre_act_values_clmem);
+        clFinish(cl->command_queue);
 
         call_kernel(cl, softmax,
             1, NULL, &work_size, &nunits_s, 0, NULL, NULL,

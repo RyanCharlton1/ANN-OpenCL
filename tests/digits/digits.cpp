@@ -8,7 +8,7 @@
 #define LABELSIZE  10
 
 #define BATCHSIZE 100
-#define EPOCHS    3 
+#define EPOCHS    3  
 
 int main(){ 
     Network n(IMAGESIZE);
@@ -26,6 +26,8 @@ int main(){
     // 10k instances, save 1k for test set 
     n.fit(d.data, IMAGESIZE, label_onehot, LABELSIZE, 
         TRAINSIZE / BATCHSIZE, BATCHSIZE, EPOCHS);
+
+    //n.fit(d.data, IMAGESIZE, label_onehot, LABELSIZE);
 
     float* test_data   = &d.data[TRAINSIZE * IMAGESIZE];
     float* test_labels = &label_onehot[TRAINSIZE * LABELSIZE];

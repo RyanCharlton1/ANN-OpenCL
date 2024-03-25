@@ -70,7 +70,7 @@ Network::Network(int ninput){
         {CL_QUEUE_PROPERTIES, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, 0};
     // Create a command buffer
     cl.command_queue = clCreateCommandQueueWithProperties(
-        cl.context, cl.device_list[0], 0, &status);
+        cl.context, cl.device_list[0], prop, &status);
     cl_print_err("Command queue creation:\t", status);
 
     // Load kernel code from file
