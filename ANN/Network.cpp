@@ -116,10 +116,14 @@ Network::~Network(){
     delete input;
 }
 
-void Network::compile(float learn_rate, Function loss, Function opt){
+void Network::compile(
+    float learn_rate, Function loss, Function opt, Function reg, float lambda){
+    
     this->learn_rate = learn_rate;
     this->loss       = loss;
     this->opt        = opt;
+    this->reg        = reg;
+    this->lambda     = lambda;
 
     // Temporary for debugging purposes
     //srand(392840238490);
@@ -306,8 +310,8 @@ void Network::calc_output_value_grad(int dsize){
     clFinish(cl.command_queue);
 }
 
-float Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
-                           int bsize, int instance){
+float Network::fit_batch_cl(
+    float* data, int dsize, float* exp, int esize, int bsize, int instance){
 
     // Feed forward whole batch 
     calc_cl(data, dsize * bsize);
@@ -325,7 +329,7 @@ float Network::fit_batch_cl(float* data, int dsize, float* exp, int esize,
         Layer* layer = layers[i];
         Layer* prev  = i != 0 ? layers[i-1] : input;
         // Calculate weight gradient dL/dw
-        layer->calc_weight_grad();
+        layer->calc_weight_grad(reg, lambda);
 
         if (prev == input) break;
         // Calculate prev Layer's act_grad dA/dz at the pre_act_values 

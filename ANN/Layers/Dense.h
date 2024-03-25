@@ -30,7 +30,7 @@ public:
     void optimise(Function optimiser, float learn_rate, int instance) override;
 
     // Calculate weight grad dL/dw by multilpying dL/dy * dy/dw(z)
-    void calc_weight_grad() override;
+    void calc_weight_grad(Function reg, float lambda) override;
 
     // Calculate prev Layer's loss_grad dL/dA by multiplying dL/dy and dy/dA(w^T)
     void calc_loss_grad() override;

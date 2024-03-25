@@ -151,18 +151,19 @@ void Dense::apply_act(){
     size_t bsize_s   = bsize;
     size_t nunits_s  = nunits;
 
+    cl_event sum_done;
+
     switch (act){
     case softmax:
         call_kernel(cl, softmax_sum,
-            1, NULL, &bsize_s, NULL, 0, NULL, NULL,
+            1, NULL, &bsize_s, NULL, 0, NULL, &sum_done,
             // Args
             nunits, 
             softmax_sum_clmem,
             pre_act_values_clmem);
-        clFinish(cl->command_queue);
 
         call_kernel(cl, softmax,
-            1, NULL, &work_size, &nunits_s, 0, NULL, NULL,
+            1, NULL, &work_size, &nunits_s, 1, &sum_done, NULL,
             // Args
             softmax_sum_clmem,
             pre_act_values_clmem,
@@ -268,19 +269,33 @@ void Dense::optimise(Function optimiser, float learn_rate, int instance){
     }
 }
 
-void Dense::calc_weight_grad(){
+void Dense::calc_weight_grad(Function reg, float lambda){
     cl_mem prev_values_clmem = prev->get_values_clmem();
 
     size_t global_size = nweights;
     size_t local_size  = prev_nunits;
 
+    cl_event weights_done;
+
     call_kernel(cl, weight_grad,
-        1, NULL, &global_size, &local_size, 0, NULL, NULL,
+        1, NULL, &global_size, &local_size, 0, NULL, &weights_done,
         // Args
         bsize,
         values_grad_clmem,
         prev_values_clmem,
         weights_grad_clmem);
+
+    switch (reg){
+    case l2_reg:
+        call_kernel(cl, l2_reg, 
+            1, NULL, &global_size, NULL, 1, &weights_done, NULL,
+            // Args
+            lambda,
+            weights_grad_clmem,
+            weights_clmem);
+
+        break;
+    }
 
     if (has_bias){
         global_size = nunits;

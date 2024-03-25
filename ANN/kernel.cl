@@ -338,3 +338,13 @@ void adam(float  learn_rate,
         avgs[i], square_avgs[i]);
 #endif
 }
+
+__kernel
+void l2_reg(float  lambda,
+   __global float* grads,
+   __global float* weights){
+
+    int i = get_global_id(0);
+
+    grads[i] += lambda * weights[i];
+}

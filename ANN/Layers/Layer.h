@@ -79,7 +79,7 @@ public:
     virtual void optimise(Function optimiser, float learn_rate, int instance) {};
     // Accumulate weight grads dL/dw by multilpying dL/dy and dy/dw(z)
     // and bias dL/db as dL/dy * dy/db(1)
-    virtual void calc_weight_grad() {};
+    virtual void calc_weight_grad(Function reg, float lambda) {};
     // Calculate prev Layer's loss_grad dL/dA by multiplying dL/dy and dy/dA(w^T)
     virtual void calc_loss_grad() {};
     // Calculate value_grad by multiplying dL/dA and dA/dz

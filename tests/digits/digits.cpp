@@ -8,14 +8,14 @@
 #define LABELSIZE  10
 
 #define BATCHSIZE 100
-#define EPOCHS    3  
+#define EPOCHS    5  
 
 int main(){ 
     Network n(IMAGESIZE);
     n.add_layer(new Dense(512, ReLU));
     n.add_layer(new Dense(512, ReLU));
     n.add_layer(new Dense(10, softmax));
-    n.compile(1e-3, cross_entropy, adam);
+    n.compile(1e-3, cross_entropy, adam, l2_reg, 0.001f);
 
     DigitData d = load_digits();
 
@@ -26,8 +26,6 @@ int main(){
     // 10k instances, save 1k for test set 
     n.fit(d.data, IMAGESIZE, label_onehot, LABELSIZE, 
         TRAINSIZE / BATCHSIZE, BATCHSIZE, EPOCHS);
-
-    //n.fit(d.data, IMAGESIZE, label_onehot, LABELSIZE);
 
     float* test_data   = &d.data[TRAINSIZE * IMAGESIZE];
     float* test_labels = &label_onehot[TRAINSIZE * LABELSIZE];

@@ -155,10 +155,15 @@ const char* function_to_string(Function f){
         return "GrdDsc";
     case adam:
         return "adam";
+    case l2_reg:
+        return "l2_reg";
     }
     return "error";
 }
 
+// String representing function arg types for call_kernel variadic 
+// function to interpret input using, similar to %d in a printf call.
+// char : type, i : int, f : float, c : clmem
 const char* function_arg_string(Function f){
     switch (f){
     case mat_vec_mult:
@@ -197,6 +202,8 @@ const char* function_arg_string(Function f){
         return "fcc";
     case adam:
         return "fcccci";
+    case l2_reg:
+        return "fcc";
     }
     return "error";
 }
@@ -217,6 +224,7 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
 
     va_start(args, event);
 
+    // Interpret variadic inputs using function_arg_string
     int i = 0;
     while (*types){
         switch (*types){
@@ -252,7 +260,7 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
         i++;
     }
 
-    
+    // Queue kernel jobs
     status = clEnqueueNDRangeKernel(
         cl->command_queue, kernel, work_dim, global_work_offset, 
         global_work_size, local_work_size, num_events_in_wait_list, 

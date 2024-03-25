@@ -124,3 +124,17 @@ $w_{t+1} = w_t - \alpha \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}$
 For some very small $\epsilon$ to stop to stop the possibility of division by zero.
 
 Reference: https://arxiv.org/pdf/1412.6980.pdf
+
+## Regularisers
+
+### Ridge Regression (L2)
+
+Add the sum of squared weights to the loss to exponentially punish large weights preventing overfitting and gradient explosion.
+
+$L = L + \frac{\lambda}{2}\Sigma_{i=1}^n w_i^2$
+
+for a give weight $w_i$:
+
+$\frac{\partial L_{reg}}{\partial w_i} = \frac{\partial L}{\partial w_i}+ \lambda w_i$
+
+Lambda is a hyperparameter to control the severity regularisation. 

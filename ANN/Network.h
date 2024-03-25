@@ -18,6 +18,8 @@ class Network{
     
     Function opt;
     Function loss;
+    Function reg;
+    float    lambda;
 
     cl_mem expected_clmem;
     cl_mem loss_clmem;
@@ -48,7 +50,9 @@ public:
     void cl_to_host();
 
     // Connect Layers, initing their memory and generating weights/bias
-    void compile(float learn_rate, Function loss, Function opt);
+    void compile(
+        float learn_rate, Function loss, Function opt, Function reg=none, 
+        float lambda=0.01f);
     // Store data in input Layer
     void set_input(float* data, int dsize);
     // Feed forward data to calculate output, stored in the final Layer
