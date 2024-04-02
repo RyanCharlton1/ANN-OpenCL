@@ -8,14 +8,14 @@
 #define LABELSIZE  10
 
 #define BATCHSIZE 100
-#define EPOCHS    5  
+#define EPOCHS    5
 
 int main(){ 
     Network n(IMAGESIZE);
     n.add_layer(new Dense(512, ReLU));
     n.add_layer(new Dense(512, ReLU));
     n.add_layer(new Dense(10, softmax));
-    n.compile(1e-3, cross_entropy, adam, l2_reg, 0.001f);
+    n.compile(1e-3, cross_entropy, adam, l2_reg, 0.01f);
 
     DigitData d = load_digits();
 
@@ -31,6 +31,7 @@ int main(){
     float* test_labels = &label_onehot[TRAINSIZE * LABELSIZE];
 
     n.evaluate(test_data, IMAGESIZE, test_labels, LABELSIZE, TESTSIZE);
+    n.evaluate(d.data, IMAGESIZE, label_onehot, LABELSIZE, TRAINSIZE);
 
     delete[] label_onehot;
 }
