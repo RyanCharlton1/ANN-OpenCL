@@ -30,8 +30,8 @@ int main(){
     float* test_data   = &d.data[TRAINSIZE * IMAGESIZE];
     float* test_labels = &label_onehot[TRAINSIZE * LABELSIZE];
 
-    n.evaluate(test_data, IMAGESIZE, test_labels, LABELSIZE, TESTSIZE);
-    n.evaluate(d.data, IMAGESIZE, label_onehot, LABELSIZE, TRAINSIZE);
+    n.evaluate(test_data, IMAGESIZE, test_labels,  LABELSIZE, TESTSIZE);
+    n.evaluate(d.data,    IMAGESIZE, label_onehot, LABELSIZE, TRAINSIZE);
 
     delete[] label_onehot;
 }

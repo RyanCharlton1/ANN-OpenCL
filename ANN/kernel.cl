@@ -1,4 +1,4 @@
-//#define DEBUG
+// #define DEBUG
 
 // [0, .. cols] [v1]
 // [..        ] [v2]

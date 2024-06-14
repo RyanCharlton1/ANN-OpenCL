@@ -1,11 +1,13 @@
 #pragma once 
 
+#define CL_TARGET_OPENCL_VERSION 300
 #include <CL/cl.h>
 
 #include <iostream>
 #include <map>
 
 #define FUNCTION_COUNT 19
+
 enum Function {
     mat_vec_mult,
     vec_vec_mult,
@@ -36,7 +38,6 @@ struct CLdata{
     void free();
 };
 
-
 const char* cl_errstr(cl_int error);
 void cl_print_err(const char* entry, cl_int error);
 // Allocate a cl buffer with data in it, NULL for 0 init
@@ -53,11 +54,11 @@ const char* function_arg_string(Function f);
 // Variadic function to set args and call kernel for given Function f.
 // All cl_mem should be given as pointers.
 void call_kernel(CLdata* cl, Function fun, 
-                 cl_uint          work_dim,
-                 const size_t *   global_work_offset,
-                 const size_t *   global_work_size,
-                 const size_t *   local_work_size,
-                 cl_uint          num_events_in_wait_list,
-                 const cl_event * event_wait_list,
-                 cl_event *       event ...);
+                 cl_uint         work_dim,
+                 const size_t*   global_work_offset,
+                 const size_t*   global_work_size,
+                 const size_t*   local_work_size,
+                 cl_uint         num_events_in_wait_list,
+                 const cl_event* event_wait_list,
+                 cl_event*       event ...);
  

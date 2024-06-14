@@ -25,13 +25,18 @@ protected:
     int bsize;
 
     cl_mem values_clmem;
-    cl_mem weights_clmem;
+    // Weights is a table of connections to previous layers nodes
+    // node | x_1 x_2 prev nodes...
+    // y_1  | w_1 w_2 ...
+    // The transpose gives weights of connections from a given node in
+    // the last layer to this layer. Useful for prev layers node gradients.
+    cl_mem weights_clmem;       
     cl_mem bias_clmem;
     cl_mem pre_act_values_clmem;
 
     cl_mem values_grad_clmem;
     cl_mem loss_grad_clmem;     // weights * dL/dz
-    cl_mem weights_grad_clmem;
+    cl_mem weights_grad_clmem;  
     cl_mem act_grad_clmem;      // Activation/value differntial
     cl_mem bias_grad_clmem;
 
@@ -64,8 +69,8 @@ public:
     void cl_to_host_weights();
 
     // Create cl mem afor values and weights and store weights
-    void init_cl_mem(Function opt, int bsize=1);
-    void free_cl_mem();
+    virtual void init_cl_mem(Function opt, int bsize=1);
+    virtual void free_cl_mem();
 
     void zero_adam_avgs();
 
@@ -90,5 +95,5 @@ public:
     // Calculate the activation function gradient at the pre_act_values
     void calc_act_grad();
     
-    virtual std::string to_string(){};
+    virtual std::string to_string(){ return ""; };
 };

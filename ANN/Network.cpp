@@ -95,6 +95,7 @@ Network::Network(int ninput){
         size_t logsize;
         clGetProgramBuildInfo(cl.program, cl.device_list[0], 
         CL_PROGRAM_BUILD_LOG, 0, nullptr, &logsize);
+        
         char* plog = new char[logsize];
         clGetProgramBuildInfo(cl.program, cl.device_list[0], 
         CL_PROGRAM_BUILD_LOG, logsize, plog, NULL);

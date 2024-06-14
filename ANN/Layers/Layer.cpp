@@ -13,19 +13,19 @@ Layer::Layer(int nunits, Function act, bool bias){
 void Layer::init_cl_mem(Function opt, int bsize){
     this->bsize = bsize;
     values_clmem = alloc_buffer(
-        cl->context, "values", bsize * nunits * sizeof(float));
+        cl->context, "values_clmem", bsize * nunits * sizeof(float));
     
     weights_clmem = alloc_buffer(
-        cl->context, "weights", nweights * sizeof(float), weights, 
+        cl->context, "weights_clmem", nweights * sizeof(float), weights, 
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
 
     if (has_bias)
     bias_clmem = alloc_buffer(
-        cl->context, "bias", nunits * sizeof(float), bias,
+        cl->context, "bias_clmem", nunits * sizeof(float), bias,
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
     
     pre_act_values_clmem = alloc_buffer(
-        cl->context, "pre act values", bsize * nunits * sizeof(float));
+        cl->context, "pre_act_values_clmem", bsize * nunits * sizeof(float));
 
     values_grad_clmem = alloc_buffer(
         cl->context, "values_grad_clmem", bsize * nunits * sizeof(float));

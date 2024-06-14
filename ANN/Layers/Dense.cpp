@@ -35,15 +35,16 @@ void Dense::connect(Layer* prev){
     case leaky_ReLU:
         // Xavier initlisation
         half_range = sqrtf(6.0 / (prev_nunits + nunits));
-        range      = 2.0f * half_range;
         break;
     
     case softmax:
         // Glorot initialisation
         half_range = sqrt(3.0 / (prev_nunits + nunits));
-        range      = 2.0f * half_range;
         break;
     }
+
+
+    range = 2.0f * half_range;
 
     for (int i = 0; i < nweights; i++)
         weights[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
@@ -52,7 +53,7 @@ void Dense::connect(Layer* prev){
         for (int i = 0; i < nunits; i++)
             bias[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
 }
-
+ 
 void Dense::calc_weight_grad(Function reg, float lambda){
     cl_mem prev_values_clmem = prev->get_values_clmem();
 
