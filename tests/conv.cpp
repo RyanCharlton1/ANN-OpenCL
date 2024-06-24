@@ -14,9 +14,9 @@ int main(){
                        8, 7, 6,
                        5, 4, 3,
                        2, 1, 0 };
-    n.fit(values, 9, nullptr, 4, 1, 2);
+    //n.fit(values, 9, nullptr, 4, 1, 2);
 
-    //n.calc(values, 9);
+    n.calc(values, 9);
     std::cout << n.trace();
 
     return 0;

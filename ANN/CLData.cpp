@@ -157,6 +157,18 @@ const char* function_to_string(Function f){
         return "adam";
     case l2_reg:
         return "l2_reg";
+    case avg:
+        return "avg";
+    case var:
+        return "var";
+    case affine:
+        return "affine";
+    case norm1d:
+        return "norm1d";
+    case norm1d_der:
+        return "norm1d_der";
+    case gamma_grad:
+        return "gamma_grad";
     }
     return "error";
 }
@@ -167,15 +179,15 @@ const char* function_to_string(Function f){
 const char* function_arg_string(Function f){
     switch (f){
     case mat_vec_mult:
-        return "iccc";
+        return "iiccc";
     case vec_vec_mult:
         return "ccc";
     case vec_vec_add_inplace:
-        return "cc";
+        return "icc";
     case mat_vec_mult_trans:
-        return "iccc";
+        return "iiccc";
     case weight_grad:
-        return "iccc";
+        return "iiiccc";
     case bias_grad:
         return "iicc";
     case ReLU:
@@ -187,15 +199,15 @@ const char* function_arg_string(Function f){
     case leaky_ReLU_der:
         return "cc";
     case softmax:
-        return "ccc";
+        return "iccc";
     case softmax_sum:
         return "icc";
     case MSE:
         return "ccc";
     case MSE_der:
-        return "ccc";
+        return "iccc";
     case cross_entropy:
-        return "ccc";
+        return "iccc";
     case cross_entropy_der:
         return "ccc";
     case GrdDsc:
@@ -204,6 +216,18 @@ const char* function_arg_string(Function f){
         return "fcccci";
     case l2_reg:
         return "fcc";
+    case avg:
+        return "cc";
+    case var:
+        return "ccc";
+    case affine:
+        return "ccc";
+    case norm1d:
+        return "ccc";
+    case norm1d_der:
+        return "ccccc";
+    case gamma_grad:
+        return "iiccc";
     }
     return "error";
 }
@@ -222,6 +246,10 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
     float  f;
     cl_mem c;
 
+    std::string error = "call_kernel ";
+    error += function_to_string(fun);
+    error += " ";
+
     va_start(args, event);
 
     // Interpret variadic inputs using function_arg_string
@@ -232,7 +260,7 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
             n      = va_arg(args, int);
             status = clSetKernelArg(kernel, i, sizeof(int), &n);
 
-            cl_print_err("call_kernel int arg", status);
+            cl_print_err((error + "int arg").c_str(), status);
             break;
 
         case 'f':
@@ -241,18 +269,18 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
             f       = va_arg(args, double);
             status  = clSetKernelArg(kernel, i, sizeof(float), &f);
 
-            cl_print_err("call_kernel float arg", status);
+            cl_print_err((error + "float arg").c_str(), status);
             break;
 
         case 'c':
             c      = va_arg(args, cl_mem);
             status = clSetKernelArg(kernel, i, sizeof(cl_mem), &c);
 
-            cl_print_err("call_kernel cl_mem arg", status);
+            cl_print_err((error + "clmem arg").c_str(), status);
             break;
 
         default:
-            std::cout << "call_kernel error" << std::endl;
+            std::cout << (error + "error").c_str() << std::endl;
             return;
         }
 
@@ -265,7 +293,8 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
         cl->command_queue, kernel, work_dim, global_work_offset, 
         global_work_size, local_work_size, num_events_in_wait_list, 
         event_wait_list, event);
-    cl_print_err("call_kernel enqueue", status);
+    
+    cl_print_err((error + "enqueue").c_str(), status);
 
     va_end(args);
 }

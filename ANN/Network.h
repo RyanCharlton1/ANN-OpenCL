@@ -47,6 +47,7 @@ public:
 
     void cl_to_host_weights();
     void cl_to_host_values();
+    void cl_to_host_norm();
     void cl_to_host();
 
     // Connect Layers, initing their memory and generating weights/bias

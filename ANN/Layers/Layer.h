@@ -19,6 +19,7 @@ protected:
     Layer* prev;
 
     Function act;
+    Function norm;
 
     CLdata* cl;
 
@@ -48,31 +49,55 @@ protected:
     cl_mem adam_bias_avg_clmem;
     cl_mem adam_bias_square_avg_clmem;
 
+    float* beta_values  = nullptr;
+    float* gamma_values = nullptr;
+
+    cl_mem norm_avg_clmem;
+    cl_mem norm_var_clmem;
+    cl_mem norm_beta_clmem;
+    cl_mem norm_gamma_clmem;
+    cl_mem norm_beta_grad_clmem;
+    cl_mem norm_gamma_grad_clmem;
+    cl_mem pre_norm_values_clmem;
+    cl_mem pre_affine_values_clmem;
+
+    cl_mem adam_beta_avg_clmem;
+    cl_mem adam_beta_square_clmem;
+    cl_mem adam_gamma_avg_clmem;
+    cl_mem adam_gamma_square_clmem;
+
 public:
-    Layer(int nunits, Function act, bool bias);
+    Layer(int nunits, Function act, Function norm, bool bias);
     ~Layer();
 
-    int    get_nunits()  { return nunits; }
-    float* get_values()  { return values; }
-    float* get_weights() { return weights; }
+    int      get_nunits()   { return nunits; }
+    float*   get_values()   { return values; }
+    float*   get_weights()  { return weights; }
+    Function get_norm()     { return norm; }
 
     void set_cl(CLdata* cl) { this->cl = cl; }
 
     cl_mem get_values_clmem()  { return values_clmem; }
     cl_mem get_weights_clmem() { return weights_clmem; }
 
-    cl_mem get_values_grad_clmem() { return values_grad_clmem; }
-    cl_mem get_loss_grad_clmem()   { return loss_grad_clmem; }
-    cl_mem get_act_grad_clmem()    { return act_grad_clmem; }
+    cl_mem get_values_grad_clmem()    { return values_grad_clmem; }
+    cl_mem get_pre_act_values_clmem() { return pre_act_values_clmem; }
+    cl_mem get_loss_grad_clmem()      { return loss_grad_clmem; }
+    cl_mem get_act_grad_clmem()       { return act_grad_clmem; }
 
     void cl_to_host_values();
     void cl_to_host_weights();
+    void cl_to_host_norm();
 
     // Create cl mem afor values and weights and store weights
     virtual void init_cl_mem(Function opt, int bsize=1);
     virtual void free_cl_mem();
 
+    void init_norm_cl_mem(Function opt);
+
     void zero_adam_avgs();
+
+    virtual void zero_adam_norm() {};
 
     // Calc new values by feed forward
     void update();
@@ -80,6 +105,8 @@ public:
     virtual void calc_pre_act_values() {};
     // Add bias to pre act values
     void add_bias();
+    // Use Layer::norm to normalise values pre activation
+    virtual void normalise() {};
     // Apply activation funtion pre act values
     void apply_act();
     // Connect Layer to prev during Network compilation
@@ -94,6 +121,9 @@ public:
     virtual void calc_value_grad() {};
     // Calculate the activation function gradient at the pre_act_values
     void calc_act_grad();
+    // Combine normalisation gradient with act_grad_clmem and calc
+    
+    virtual void calc_norm_grad() {};
     
     virtual std::string to_string(){ return ""; };
 };

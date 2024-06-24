@@ -181,9 +181,16 @@ void Network::cl_to_host_values(){
         layer->cl_to_host_values();
 }
 
+void Network::cl_to_host_norm(){
+    for (Layer* layer : layers)
+        if (layer->get_norm() != none)
+            layer->cl_to_host_norm();
+}
+
 void Network::cl_to_host(){
     cl_to_host_values();
     cl_to_host_weights();
+    cl_to_host_norm();
 }
 
 // Inits a read only cl buffer with the input data in
@@ -229,8 +236,8 @@ float* Network::calc(float* data, int dsize){
 
 float Network::calc_loss(int bsize){
     Layer* out_layer   = get_output_layer();
-    size_t bsize_s     = bsize;
-    size_t global_size = bsize_s * out_layer->get_nunits();
+    size_t global_size = bsize * out_layer->get_nunits();
+    int    out_nunits  = out_layer->get_nunits();
 
     switch (loss)
     {
@@ -243,8 +250,9 @@ float Network::calc_loss(int bsize){
             loss_clmem);
 
         call_kernel(&cl, MSE_der,
-            1, NULL, &global_size, &bsize_s, 0, NULL, NULL,
+            1, NULL, &global_size, NULL, 0, NULL, NULL,
             // Args
+            out_nunits,
             expected_clmem,
             out_layer->get_values_clmem(),
             loss_grad_clmem);
@@ -253,8 +261,9 @@ float Network::calc_loss(int bsize){
 
     case cross_entropy:
         call_kernel(&cl, cross_entropy,
-            1, NULL, &global_size, &bsize_s, 0, NULL, NULL,
+            1, NULL, &global_size, NULL, 0, NULL, NULL,
             // Args
+            out_nunits,
             expected_clmem,
             out_layer->get_values_clmem(),
             loss_clmem);
@@ -297,8 +306,11 @@ void Network::calc_output_value_grad(int dsize){
         return;
 
     Layer* out_layer = get_output_layer();
+
+    // Calculate dA/dz
     out_layer->calc_act_grad();
 
+    // Multiply activation grad by loss grad to get dL/dz
     size_t out_nunits = out_layer->get_nunits();
     size_t work_size  = dsize * out_nunits;
     call_kernel(&cl, vec_vec_mult,
@@ -307,6 +319,11 @@ void Network::calc_output_value_grad(int dsize){
         loss_grad_clmem,
         out_layer->get_act_grad_clmem(),
         out_layer->get_values_grad_clmem());
+
+    // If using norm, previous step calculated dL/dAf because it hasn't
+    // accounted for the affine and normalisation gradients
+    if (out_layer->get_norm() != none)
+        out_layer->calc_norm_grad();
 
     clFinish(cl.command_queue);
 }
@@ -341,6 +358,9 @@ float Network::fit_batch_cl(
         // Calculate prev Layer's value_grad by multiplying 
         // dL/dA(act_grad) and dA/dz(loss_grad)
         prev->calc_value_grad();
+        // If using norm, previous step computes dL/Af
+        if (prev->get_norm() != none)
+            prev->calc_norm_grad();
     }
 
     for (Layer* layer : layers)
@@ -473,7 +493,7 @@ void Network::evaluate(float* test, int tsize, float* exp, int esize,
             } break;
 
         case MSE:
-            //std::cout << "tbc" << std::endl;
+            std::cout << "tbc" << std::endl;
             break;
         }
     }

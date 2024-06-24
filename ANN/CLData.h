@@ -6,7 +6,7 @@
 #include <iostream>
 #include <map>
 
-#define FUNCTION_COUNT 19
+#define FUNCTION_COUNT none
 
 enum Function {
     mat_vec_mult,
@@ -23,6 +23,12 @@ enum Function {
     GrdDsc,
     adam,
     l2_reg,
+    avg,
+    var,
+    affine,
+    norm1d,
+    norm1d_der,
+    gamma_grad,
     none
 };
 

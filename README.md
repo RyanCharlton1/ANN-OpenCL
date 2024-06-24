@@ -138,3 +138,44 @@ for a give weight $w_i$:
 $\frac{\partial L_{reg}}{\partial w_i} = \frac{\partial L}{\partial w_i}+ \lambda w_i$
 
 Lambda is a hyperparameter to control the severity regularisation. 
+
+## Normalisation
+
+Fitting the data to a normal distirbution(roughly) centering the mean at 0 and giving a vairance of 1. This removes problems of gradient magnitude like explosion and being too small to effectively change.
+
+### Batch Normalisation
+
+$\hat{x} = \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}}$
+
+$y = \gamma \hat{x} + \beta$
+
+The centering of the distribution around 0 makes pre normalisation bias redundant.
+
+1DNorm normalises each feature across all samples in a batch.
+2DNorm normalises all the pixels across all samples.
+Each channel has its own $\beta$ and $\gamma$.
+
+### Derivative
+
+$\mu = \frac{1}{N}\sum_i^N x_i$
+
+$\frac{\partial\mu}{\partial x_i} = \frac{1}{N}$
+
+$\sigma^2 = E[X^2] - \mu^2 = \frac{1}{N}\sum_j^N x_j^2 - \mu^2$
+
+$\frac{\partial\sigma^2}{\partial x_i} = \frac{\partial}{\partial x_i}[\frac{1}{N}\sum_j^N x_j^2 - \mu^2] = \frac{1}{N}\sum_j^N \frac{\partial}{\partial x_i}[x_j^2] - \frac{\partial}{\partial x_i}[\mu^2] = \frac{2}{N}x_i - \frac{2}{N}\mu = \frac{2}{N}(x_i - \mu)$
+
+$\frac{\partial N}{\partial x_i} = \frac{x_i - \mu}{\sqrt{\sigma^2 + \epsilon}}$
+
+$u = x_i - \mu$ 
+
+$\frac{\partial u}{\partial x_i}=1 - \frac{1}{N}$
+
+$v = (\sigma^2 + \epsilon)^{\frac{1}{2}}$
+
+$\frac{\partial v}{\partial x_i} = \frac{1}{2}\frac{\partial}{\partial x_i}[\sigma^2 + \epsilon](\sigma^2 + \epsilon)^{\frac{1}{2}} = \frac{x_i - \mu}{n\sqrt{\sigma^2 + \epsilon}}$
+
+By qoutient rule:
+
+$\frac{\partial \hat{x_i}}{\partial x_i} = \frac{(1-\frac{1}{n})(\sigma^2 + \epsilon)^{\frac{1}{2}} - \frac{(x_i - \mu)^2}{n\sqrt{\sigma^2 + \epsilon}}}{\sigma^2 + \epsilon} = \frac{(1-\frac{1}{N})(\sigma^2 + \epsilon) - \frac{1}{N}(x_i - \mu)^2}{(\sigma^2 + \epsilon)^{\frac{3}{2}}}$
+

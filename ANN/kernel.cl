@@ -1,4 +1,4 @@
-// #define DEBUG
+//#define DEBUG
 
 // [0, .. cols] [v1]
 // [..        ] [v2]
@@ -7,26 +7,26 @@
 // for batches, needs to be set in local workgroup size.
 __kernel 
 void mat_vec_mult(int    cols,
+                  int    rows,
          __global float* mat,
          __global float* vec_in,
          __global float* vec_out){
     
-    int g    = get_global_id(0);
-    int l    = get_local_id(0);
-    int rows = get_local_size(0);
+    int g = get_global_id(0);
 
     // where to start reading input
     int start = cols * (g / rows);
+    int row   = g % rows;
 
     float f = 0.0f;
     for (int i = 0; i < cols; i++){
-        f += mat[l * cols + i] * vec_in[start + i];
+        f += mat[row * cols + i] * vec_in[start + i];
     }
 
     vec_out[g] = f;
 
 #ifdef DEBUG
-    printf("value[%d]:=%f\n", g, f);
+    printf("mat_vec_mult[%d]:=%f\n", g, f);
 #endif
 }
 
@@ -48,15 +48,14 @@ void vec_vec_mult(__global float* vec_a,
 // Add two vectors and store in the first, second may be larger than first,
 // it will repeat if second length is set as local work size.
 __kernel
-void vec_vec_add_inplace(__global float* values,
-                         __global float* bias){
+void vec_vec_add_inplace(int    bias_len,
+                __global float* values,
+                __global float* bias){
 
     int g = get_global_id(0);
-    // Length of bias vec
-    int s = get_local_size(0);
 
     //printf("g=%d: %f += %f\n", g, values[g], bias[g%s]);
-    values[g] += bias[g % s];
+    values[g] += bias[g % bias_len];
 }
 
 __kernel
@@ -74,21 +73,22 @@ void vec_scalar_div(__global float* vec,
 // element of the weight grad matrix 
 __kernel 
 void weight_grad(int    bsize,
+                 int    rows,
+                 int    cols,
         __global float* loss,
         __global float* prev_values,
         __global float* weight_grad){
 
-    int s        = get_global_size(0);
-    int col_size = get_local_size(0);   // prev_nunits, size of prev_values
-    int row_size = s / col_size;        // nunits, size of loss
-
     int g   = get_global_id(0);
-    int col = get_local_id(0);
+    int col = g % cols;
 
     float f = 0.0f;
-    for (int b = 0; b < bsize; b++)
-        f += loss[b * row_size + g / col_size] 
-           * prev_values[b * col_size + col];
+    for (int b = 0; b < bsize; b++){
+        //printf("[%d]+= %f * %f\n", g, loss[b * rows + g / cols], prev_values[b * cols + col]);
+        f += loss[b * rows + g / cols] 
+           * prev_values[b * cols + col];
+    }
+    
     
     f /= (float)bsize;
 
@@ -130,20 +130,20 @@ void bias_grad(int    bsize,
 // Transpose, read collumns instead of rows.
 __kernel 
 void mat_vec_mult_trans(int    rows,
+                        int    cols,
                __global float* mat,
                __global float* vec_in,
                __global float* vec_out){
     
-    int g    = get_global_id(0);
-    int l    = get_local_id(0);
-    int cols = get_local_size(0);
+    int g = get_global_id(0);
 
     // where to start reading input
     int start = rows * (g / cols);
+    int col   = g % cols;
 
     float f = 0.0f;
     for (int i = 0; i < rows; i++){
-        f += mat[i * cols + l] * vec_in[start + i];
+        f += mat[i * cols + col] * vec_in[start + i];
     }
     
     vec_out[g] = f;
@@ -170,7 +170,7 @@ void leaky_ReLU(__global float* pre_act_values,
 
     int g = get_global_id(0);
 
-    values[g] = pre_act_values[g] * (pre_act_values[g] > 0.0f ? 1.0f : 0.1f);
+    values[g] = pre_act_values[g] * (pre_act_values[g] < 0.0f ? 0.1f : 1.0f);
 }
 
 // ReLU activation der
@@ -190,7 +190,7 @@ void leaky_ReLU_der(__global float* pre_act_values,
 
     int g = get_global_id(0);
 
-    values_grad[g] = pre_act_values[g] > 0.0f ? 1.0f : 0.1f;
+    values_grad[g] = pre_act_values[g] < 0.0f ? 0.1f : 1.0f;
 }
 
 // MSE loss, can do multiple batches
@@ -203,26 +203,28 @@ void MSE(__global float* y,
     int n = get_global_size(0);
     
     float err = y[i] - y_[i];
-    //printf("%d:err=(%f - %f): %f / %d / 2.0f\n", i, y[i], y_[i], err*err, n);
     x[i] = err * err / (float)n / 2.0f;
+
+#ifdef DEBUG
+    printf("MSE[%d]:err=(%f - %f): %f / %d / 2.0f\n", i, y[i], y_[i], err*err, n);
+#endif
 }
 
-// MSE loss der, can do multiple batches, necerssary to set local work
-// groups, even for a single batch
+// MSE loss der, needs no adjustment for multiple batches
 __kernel 
-void MSE_der(__global float* y,
-             __global float* y_,
-             __global float* der){
+void MSE_der(int    size,
+    __global float* y,
+    __global float* y_,
+    __global float* der){
 
     int i = get_global_id(0);
-    int n = get_local_size(0);
 
     float err = y[i] - y_[i];
     
-    der[i] = -err / (float)n;
+    der[i] = -err / (float)size;
 
 #ifdef DEBUG
-    printf("MSE_der:%f = -%f / %f\n", der[i], err, (float)n);
+    printf("MSE_der:%f = -%f / %f\n", der[i], err, (float)size);
 #endif
 }
 
@@ -249,30 +251,30 @@ void softmax_sum(int    zsize,
 // Softmax, can do multiple batches, necerssary to set local work
 // groups, even for a single batch 
 __kernel
-void softmax(__global float* sums,
-             __global float* z,
-             __global float* out){
+void softmax(int    nunits,
+    __global float* sums,
+    __global float* z,
+    __global float* out){
 
     int i = get_global_id(0);
-    int s = get_local_size(0);
 
-    out[i] = exp(z[i]) / sums[i/s];
+    out[i] = exp(z[i]) / sums[i/nunits];
 
 #ifdef DEBUG
-    printf("softmax[%d] = %f / %f\n", i, exp(z[i]), sums[i/s]);
+    printf("softmax[%d] = %f / %f\n", i, exp(z[i]), sums[i/nunits]);
 #endif
 }
 
 // Set local work groups for each batch 
 __kernel 
-void cross_entropy(__global float* y,
-                   __global float* y_,
-                   __global float* x){
+void cross_entropy(int nunits,
+          __global float* y,
+          __global float* y_,
+          __global float* x){
 
-    int   i = get_global_id(0);
-    float s = (float)get_local_size(0);
+    int i = get_global_id(0);
 
-    x[i] = -y[i] * log(y_[i]) / s;
+    x[i] = -y[i] * log(y_[i]) / nunits;
 }
 
 // Softmax der, combining the cross entropy and softmax der makes 
@@ -308,9 +310,9 @@ void GrdDsc(float  learn_rate,
 // Adam optimiser, needs a separate clmem for average and squared average
 // t is the number instance from the current batch
 
-#define BETA1 0.9
-#define BETA2 0.999
-#define EPSILON 1e-6
+#define BETA1 0.9f
+#define BETA2 0.999f
+#define EPSILON 1e-6f
 
 __kernel
 void adam(float  learn_rate,
@@ -347,4 +349,117 @@ void l2_reg(float  lambda,
     int i = get_global_id(0);
 
     grads[i] += lambda * weights[i];
+}
+
+// Calculate average
+__kernel
+void avg(
+__global float* values,
+__global float* result){
+
+    int i = get_global_id(0);
+    int l = get_local_id(0);
+
+    int len = get_global_size(0) / get_local_size(0);
+
+    result[l] += values[i] / (float)len;
+}
+
+// Calculate variance: sum (x - avg)^2 / n
+__kernel
+void var(
+__global float* avg,
+__global float* values,
+__global float* result){
+
+    int i = get_global_id(0);
+    int l = get_local_id(0);
+
+    int len = get_global_size(0) / get_local_size(0);
+
+    result[l] += pow(values[i] - avg[l], 2) / (float)len;
+}
+
+// Apply affine transform: y = gamma x + beta
+__kernel 
+void affine(
+__global float* values,
+__global float* gamma,
+__global float* beta){
+
+    int i = get_global_id(0);
+    int l = get_local_id(0);
+
+    values[i] = gamma[l] * values[i] + beta[l];
+
+#ifdef DEBUG
+    printf("affine[%d] = %f * %f + %f\n", i, gamma[l], values[i], beta[l]);
+#endif
+}
+
+__kernel
+void norm1d(
+__global float* values,
+__global float* avg,
+__global float* var){
+
+    int i = get_global_id(0);
+    int l = get_local_id(0);
+
+#ifdef DEBUG
+    printf("norm1d[%d] = (%f - %f) / %f\n", i, values[i], avg[l], sqrt(var[l] + EPSILON));
+#endif
+
+    values[i] = (values[i] - avg[l]) / sqrt(var[l] + EPSILON);
+}
+
+// Combine the affine and norm der calcs with act grad to get grad 
+// of all transforms after weights x prev values.
+__kernel
+void norm1d_der(
+__global float* pre_norm,
+__global float* avg,
+__global float* var,
+__global float* gamma,
+__global float* act_grad){
+
+    int i = get_global_id(0);
+    int l = get_local_id(0);
+
+    int len = get_local_size(0);
+
+    float norm_der = (1.0f - 1.0f/len) * (var[l] + EPSILON);
+    norm_der      -= (1.0f/len) * pow(pre_norm[i] - avg[l], 2.0f);
+    norm_der      /= pow(var[l] + EPSILON, 1.5f);
+
+#ifdef DEBUG
+    printf("act_grad[%d]: %f * %f * %f\n", i, act_grad[i], gamma[l], norm_der);
+#endif
+
+    act_grad[i] = act_grad[i] * gamma[l] * norm_der;
+}
+
+__kernel 
+void gamma_grad(
+         int    bsize,
+         int    nunits,
+__global float* pre_affine_values,
+__global float* value_grad,
+__global float* gamma_grad){
+
+    int g = get_global_id(0);
+
+    float f = 0.0f;
+
+    for (int i = 0; i < bsize; i++){
+        //printf("[%d]+= %f * %f\n", g, pre_affine_values[nunits * i + g], value_grad[nunits * i + g]);
+        f += pre_affine_values[nunits * i + g] 
+           * value_grad[nunits * i + g];
+    }
+    f /= (float)bsize;
+
+    gamma_grad[g] = f;
+#ifdef DEBUG
+    printf("gamma_grad[%d]: %f\n", g, f);
+#endif
 }

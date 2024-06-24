@@ -5,18 +5,106 @@
 #include <cstring>
 #include <string>
 
-void Dense::calc_pre_act_values(){
-    size_t work_size       = bsize * nunits;
-    size_t local_work_size = nunits;
+void Dense::zero_adam_norm(){
+    float zero = 0.0f;
+
+    cl_int status;
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_beta_avg_clmem, &zero, sizeof(float), 
+        0, nunits * sizeof(float), 0, NULL, NULL);  
+    cl_print_err("adam_beta_avg_clmem", status);
     
-    call_kernel(
-        cl, mat_vec_mult, 
-        1, NULL, &work_size, &local_work_size, 0, NULL, NULL,
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_beta_square_clmem, &zero, sizeof(float), 
+        0, nunits * sizeof(float), 0, NULL, NULL);  
+    cl_print_err("adam_beta_square_clmem", status);
+
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_gamma_avg_clmem, &zero, sizeof(float), 
+        0, nunits * sizeof(float), 0, NULL, NULL);  
+    cl_print_err("adam_gamma_avg_clmem", status);
+    
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_gamma_square_clmem, &zero, sizeof(float), 
+        0, nunits * sizeof(float), 0, NULL, NULL);  
+    cl_print_err("adam_gamma_square_clmem", status);
+}
+
+void Dense::calc_pre_act_values(){
+    size_t work_size = bsize * nunits;
+    
+    call_kernel(cl, mat_vec_mult, 
+        1, NULL, &work_size, NULL, 0, NULL, NULL,
         // Args
         prev_nunits,
+        nunits,
         weights_clmem,
         prev->get_values_clmem(),
         pre_act_values_clmem);
+
+    clFinish(cl->command_queue);
+}
+
+void Dense::normalise(){
+    size_t work_size  = bsize * nunits;
+    size_t local_size = nunits;
+
+    float zero = 0.0f;
+
+    cl_int status;
+    // Hold pre norm values for computing norm gradient
+    clEnqueueCopyBuffer(cl->command_queue, 
+        pre_act_values_clmem, pre_norm_values_clmem, 0, 0, 
+        bsize * nunits * sizeof(float), 0, NULL, NULL);
+
+    // Set initial average and variance calcs to zero
+    status = clEnqueueFillBuffer(cl->command_queue, norm_avg_clmem,
+        &zero, sizeof(float), 0, nunits * sizeof(float), 0, NULL, NULL);
+    cl_print_err("norm_avg_clmem", status);
+
+    status = clEnqueueFillBuffer(cl->command_queue, norm_var_clmem,
+        &zero, sizeof(float), 0, nunits * sizeof(float), 0, NULL, NULL);
+    cl_print_err("norm_var_clmem", status);
+
+    clFinish(cl->command_queue);
+
+    cl_event avg_complete, var_complete, norm_complete;
+
+    // Calculate each feature's average across batches
+    call_kernel(cl, avg, 
+        1, NULL, &work_size, &local_size, 0, NULL, &avg_complete,
+        // Args
+        pre_act_values_clmem,
+        norm_avg_clmem);
+    
+    // Calculate each feature's variance across batches
+    call_kernel(cl, var,
+        1, NULL, &work_size, &local_size, 1, &avg_complete, &var_complete,
+        // Args
+        norm_avg_clmem,
+        pre_act_values_clmem,
+        norm_var_clmem);
+    
+    // Normalise the values using each features variance and average
+    call_kernel(cl, norm1d,
+        1, NULL, &work_size, &local_size, 1, &var_complete, &norm_complete,
+        // Args
+        pre_act_values_clmem,
+        norm_avg_clmem,
+        norm_var_clmem);
+    
+    // Hold pre affine values for affine parameter derivative calc
+    clEnqueueCopyBuffer(cl->command_queue, 
+        pre_act_values_clmem, pre_affine_values_clmem, 0, 0, 
+        bsize * nunits * sizeof(float), 1, &norm_complete, NULL);
+
+    // Apply affine transformation to normalised values
+    call_kernel(cl, affine, 
+        1, NULL, &work_size, &local_size, 1, &norm_complete, NULL,
+        // Args
+        pre_act_values_clmem,
+        norm_gamma_clmem,
+        norm_beta_clmem);
 
     clFinish(cl->command_queue);
 }
@@ -63,9 +151,11 @@ void Dense::calc_weight_grad(Function reg, float lambda){
     cl_event weights_done;
 
     call_kernel(cl, weight_grad,
-        1, NULL, &global_size, &local_size, 0, NULL, &weights_done,
+        1, NULL, &global_size, NULL, 0, NULL, &weights_done,
         // Args
         bsize,
+        nunits,
+        prev_nunits,
         values_grad_clmem,
         prev_values_clmem,
         weights_grad_clmem);
@@ -96,13 +186,13 @@ void Dense::calc_weight_grad(Function reg, float lambda){
 }
 
 void Dense::calc_loss_grad(){
-    size_t local_size  = prev->get_nunits();
-    size_t global_size = bsize * local_size;
+    size_t global_size = bsize * prev_nunits;
 
     call_kernel(cl, mat_vec_mult_trans,
-        1, NULL, &global_size, &local_size, 0, NULL, NULL,
+        1, NULL, &global_size, NULL, 0, NULL, NULL,
         // Args
         nunits,
+        prev_nunits,
         weights_clmem,
         values_grad_clmem,
         prev->get_loss_grad_clmem());    
@@ -123,11 +213,47 @@ void Dense::calc_value_grad(){
     clFinish(cl->command_queue);
 }
 
+void Dense::calc_norm_grad(){
+    size_t work_size  = bsize * nunits;
+    size_t local_size = nunits;
+
+    // Gamma gradient dAf/dg = N => dL/dg = dL/dAf * dAf/dg
+    call_kernel(cl, gamma_grad,
+        1, NULL, &local_size, NULL, 0, NULL, NULL,
+        // Args
+        bsize, 
+        nunits,
+        pre_affine_values_clmem,
+        values_grad_clmem,
+        norm_gamma_grad_clmem);
+
+    // Beta gradient dA/db = 1 => dL/db = dL/dAf * dAf/db
+    call_kernel(cl, bias_grad,
+        1, NULL, &local_size, NULL, 0, NULL, NULL,
+        // Args
+        bsize,
+        nunits,
+        values_grad_clmem,
+        norm_beta_grad_clmem);
+
+    call_kernel(cl, norm1d_der,
+        1, NULL, &work_size, &local_size, 0, NULL, NULL,
+        // Args
+        pre_norm_values_clmem,
+        norm_avg_clmem,
+        norm_var_clmem,
+        norm_gamma_clmem,
+        values_grad_clmem);
+
+    clFinish(cl->command_queue);
+}
+
 // Return string of weight matrix
 std::string Dense::to_string(){
     char buffer[16];
     std::string s;
 
+    // Print weights as matrices 
     for (int i = 0; i < nunits; i++){
         s += "[";
         for (int j = 0; j < prev_nunits; j++){
@@ -140,10 +266,34 @@ std::string Dense::to_string(){
         s += "]\n";
     }
     
+    // Print bias a vector length ways to not take up screen
     if (has_bias){
         s += "bias: [";
         for (int i = 0; i < nunits; i++){
             sprintf(buffer, "% .5f ", bias[i]);
+            s += buffer;
+        }
+
+        s.pop_back();
+        s += "]\n";
+    }
+
+    // Print beta and gamma 
+    if (norm != none){
+        s += "gamma: [";
+
+        for (int i = 0; i < nunits; i++){
+            sprintf(buffer, "% .5f ", gamma_values[i]);
+            s += buffer;
+        }
+
+        s.pop_back();
+        s += "]\n";
+
+        s += "beta:  [";
+
+        for (int i = 0; i < nunits; i++){
+            sprintf(buffer, "% .5f ", beta_values[i]);
             s += buffer;
         }
 
