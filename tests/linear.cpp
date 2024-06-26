@@ -18,7 +18,7 @@ int main(){
         out[i] = 2 * in[i] + 1.0f; 
     }
 
-    n.fit(in, 1, out, 1, 3, 5, 100);
+    n.fit(in, 1, out, 1, 3, 5, 20);
     
     //n.evaluate(in, 1, out, 1, 100);
 

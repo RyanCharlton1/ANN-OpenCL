@@ -5,31 +5,6 @@
 #include <cstring>
 #include <string>
 
-void Dense::zero_adam_norm(){
-    float zero = 0.0f;
-
-    cl_int status;
-    status = clEnqueueFillBuffer(
-        cl->command_queue, adam_beta_avg_clmem, &zero, sizeof(float), 
-        0, nunits * sizeof(float), 0, NULL, NULL);  
-    cl_print_err("adam_beta_avg_clmem", status);
-    
-    status = clEnqueueFillBuffer(
-        cl->command_queue, adam_beta_square_clmem, &zero, sizeof(float), 
-        0, nunits * sizeof(float), 0, NULL, NULL);  
-    cl_print_err("adam_beta_square_clmem", status);
-
-    status = clEnqueueFillBuffer(
-        cl->command_queue, adam_gamma_avg_clmem, &zero, sizeof(float), 
-        0, nunits * sizeof(float), 0, NULL, NULL);  
-    cl_print_err("adam_gamma_avg_clmem", status);
-    
-    status = clEnqueueFillBuffer(
-        cl->command_queue, adam_gamma_square_clmem, &zero, sizeof(float), 
-        0, nunits * sizeof(float), 0, NULL, NULL);  
-    cl_print_err("adam_gamma_square_clmem", status);
-}
-
 void Dense::calc_pre_act_values(){
     size_t work_size = bsize * nunits;
     
@@ -47,7 +22,7 @@ void Dense::calc_pre_act_values(){
 
 void Dense::normalise(){
     size_t work_size  = bsize * nunits;
-    size_t local_size = nunits;
+    size_t features = get_norm_size();
 
     float zero = 0.0f;
 
@@ -72,22 +47,24 @@ void Dense::normalise(){
 
     // Calculate each feature's average across batches
     call_kernel(cl, avg, 
-        1, NULL, &work_size, &local_size, 0, NULL, &avg_complete,
+        1, NULL, &features, NULL, 0, NULL, &avg_complete,
         // Args
+        bsize,
         pre_act_values_clmem,
         norm_avg_clmem);
     
     // Calculate each feature's variance across batches
     call_kernel(cl, var,
-        1, NULL, &work_size, &local_size, 1, &avg_complete, &var_complete,
+        1, NULL, &features, NULL, 1, &avg_complete, &var_complete,
         // Args
+        bsize,
         norm_avg_clmem,
         pre_act_values_clmem,
         norm_var_clmem);
     
     // Normalise the values using each features variance and average
     call_kernel(cl, norm1d,
-        1, NULL, &work_size, &local_size, 1, &var_complete, &norm_complete,
+        1, NULL, &work_size, &features, 1, &var_complete, &norm_complete,
         // Args
         pre_act_values_clmem,
         norm_avg_clmem,
@@ -100,7 +77,7 @@ void Dense::normalise(){
 
     // Apply affine transformation to normalised values
     call_kernel(cl, affine, 
-        1, NULL, &work_size, &local_size, 1, &norm_complete, NULL,
+        1, NULL, &work_size, &features, 1, &norm_complete, NULL,
         // Args
         pre_act_values_clmem,
         norm_gamma_clmem,
@@ -282,7 +259,7 @@ std::string Dense::to_string(){
     if (norm != none){
         s += "gamma: [";
 
-        for (int i = 0; i < nunits; i++){
+        for (int i = 0; i < get_norm_size(); i++){
             sprintf(buffer, "% .5f ", gamma_values[i]);
             s += buffer;
         }
@@ -292,7 +269,7 @@ std::string Dense::to_string(){
 
         s += "beta:  [";
 
-        for (int i = 0; i < nunits; i++){
+        for (int i = 0; i < get_norm_size(); i++){
             sprintf(buffer, "% .5f ", beta_values[i]);
             s += buffer;
         }

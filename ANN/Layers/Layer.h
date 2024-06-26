@@ -85,6 +85,8 @@ public:
     cl_mem get_loss_grad_clmem()      { return loss_grad_clmem; }
     cl_mem get_act_grad_clmem()       { return act_grad_clmem; }
 
+    int get_norm_size();
+
     void cl_to_host_values();
     void cl_to_host_weights();
     void cl_to_host_norm();
@@ -97,7 +99,7 @@ public:
 
     void zero_adam_avgs();
 
-    virtual void zero_adam_norm() {};
+    void zero_adam_norm();
 
     // Calc new values by feed forward
     void update();

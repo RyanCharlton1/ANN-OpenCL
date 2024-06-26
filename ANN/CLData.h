@@ -29,6 +29,8 @@ enum Function {
     norm1d,
     norm1d_der,
     gamma_grad,
+    norm2d,
+    norm2d_der,
     none
 };
 

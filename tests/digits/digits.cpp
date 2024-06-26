@@ -13,17 +13,17 @@
 
 int main(){ 
     Network n(IMAGESIZE);
-    //n.add_layer(new Conv(28, 28, 1, 1, 5, 5, ReLU));
-    //n.add_layer(new Conv(24, 24, 1, 1, 5, 5, ReLU));
-    //n.add_layer(new Conv(20, 20, 1, 1, 5, 5, ReLU));
-    //n.add_layer(new Conv(16, 16, 1, 1, 5, 5, ReLU));
-    //n.add_layer(new Conv(12, 12, 1, 1, 5, 5, ReLU));
-    ////n.add_layer(new Dense(100000, ReLU));
-    //n.add_layer(new Dense(10, softmax));
-    n.add_layer(new Dense(512, ReLU, ));
-    n.add_layer(new Dense(512, ReLU, ));
+    n.add_layer(new Conv(28, 28, 1, 1, 5, 5, ReLU));
+    n.add_layer(new Conv(24, 24, 1, 1, 5, 5, ReLU));
+    n.add_layer(new Conv(20, 20, 1, 1, 5, 5, ReLU));
+    n.add_layer(new Conv(16, 16, 1, 1, 5, 5, ReLU));
+    n.add_layer(new Conv(12, 12, 1, 1, 5, 5, ReLU));
     n.add_layer(new Dense(10, softmax));
-    n.compile(1e-3, cross_entropy, adam, l2_reg, 0.01f);
+    //n.add_layer(new Dense(10, softmax));
+    //n.add_layer(new Dense(512, ReLU));
+    //n.add_layer(new Dense(512, ReLU));
+    //n.add_layer(new Dense(10, softmax));
+    n.compile(1e-3, cross_entropy, adam); //l2_reg, 0.01f);
 
     DigitData d = load_digits();
 

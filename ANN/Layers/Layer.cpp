@@ -12,17 +12,13 @@ Layer::Layer(int nunits, Function act, Function norm, bool bias){
     if (norm != none) has_bias   = false;
     if (bias)         this->bias = new float[nunits];
 
-    switch (norm){
-    case norm1d:
-        beta_values  = new float[nunits];
-        gamma_values = new float[nunits];
+    if (norm != none){
+        size_t size = get_norm_size();
+        beta_values  = new float[size];
+        gamma_values = new float[size];
 
-        std::fill(beta_values, beta_values + nunits, 0.0f);
-        std::fill(gamma_values, gamma_values + nunits, 1.0f);
-        break;
-    
-    default:
-        break;
+        std::fill(beta_values, beta_values + size, 0.0f);
+        std::fill(gamma_values, gamma_values + size, 1.0f);
     }
 
 }
@@ -90,16 +86,7 @@ void Layer::init_norm_cl_mem(Function opt){
     float zero = 0.0f;
     float one  = 1.0f;
 
-    size_t size;
-    switch (norm)
-    {
-    case norm1d:
-        size = nunits * sizeof(float);
-        break;
-    
-    default:
-        break;
-    }
+    size_t size = get_norm_size() * sizeof(float);
 
     cl_int status;
 
@@ -213,6 +200,22 @@ void Layer::update(){
     apply_act();
 }
 
+int Layer::get_norm_size(){
+    size_t size;
+    switch (norm)
+    {
+    case norm1d:
+        size = nunits;
+        break;
+
+    case norm2d:
+        size = 1;
+        break;
+    }
+
+    return size;
+}
+
 void Layer::cl_to_host_values() {
     cl_int status = clEnqueueReadBuffer(
         cl->command_queue, values_clmem, CL_FALSE, 0, 
@@ -232,16 +235,7 @@ void Layer::cl_to_host_weights() {
 }
 
 void Layer::cl_to_host_norm(){
-    size_t size;
-    switch (norm)
-    {
-    case norm1d:
-        size = nunits * sizeof(float);
-        break;
-    
-    default:
-        break;
-    }
+    size_t size = get_norm_size() * sizeof(float);
 
     cl_int status = clEnqueueReadBuffer(
         cl->command_queue, norm_beta_clmem, CL_FALSE, 0, 
@@ -287,6 +281,33 @@ void Layer::zero_adam_avgs(){
 
     if (norm != none)
         zero_adam_norm();
+}
+
+void Layer::zero_adam_norm(){
+    float zero = 0.0f;
+
+    size_t size = get_norm_size() * sizeof(float);
+
+    cl_int status;
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_beta_avg_clmem, &zero, sizeof(float), 
+        0, size, 0, NULL, NULL);  
+    cl_print_err("adam_beta_avg_clmem", status);
+    
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_beta_square_clmem, &zero, sizeof(float), 
+        0, size, 0, NULL, NULL);  
+    cl_print_err("adam_beta_square_clmem", status);
+
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_gamma_avg_clmem, &zero, sizeof(float), 
+        0, size, 0, NULL, NULL);  
+    cl_print_err("adam_gamma_avg_clmem", status);
+    
+    status = clEnqueueFillBuffer(
+        cl->command_queue, adam_gamma_square_clmem, &zero, sizeof(float), 
+        0, size, 0, NULL, NULL);  
+    cl_print_err("adam_gamma_square_clmem", status);
 }
 
 void Layer::add_bias(){

@@ -8,7 +8,6 @@ public:
     Dense(int nunits, Function act, Function norm=none, bool bias=true) 
     : Layer(nunits, act, norm, bias) {}
     
-    void zero_adam_norm() override;
     // Past values mutliplied by weights
     void calc_pre_act_values() override;
     // Batch normalise values before activation function

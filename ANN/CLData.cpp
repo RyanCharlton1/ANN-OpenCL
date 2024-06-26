@@ -217,9 +217,9 @@ const char* function_arg_string(Function f){
     case l2_reg:
         return "fcc";
     case avg:
-        return "cc";
+        return "icc";
     case var:
-        return "ccc";
+        return "iccc";
     case affine:
         return "ccc";
     case norm1d:

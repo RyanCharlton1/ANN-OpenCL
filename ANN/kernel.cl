@@ -1,4 +1,4 @@
-//#define DEBUG
+// #define DEBUG
 
 // [0, .. cols] [v1]
 // [..        ] [v2]
@@ -351,33 +351,39 @@ void l2_reg(float  lambda,
     grads[i] += lambda * weights[i];
 }
 
-// Calculate average
+// Calculate average for each feature
 __kernel
 void avg(
+         int    bsize,
 __global float* values,
 __global float* result){
 
-    int i = get_global_id(0);
-    int l = get_local_id(0);
+    int g         = get_global_id(0);
+    int nfeatures = get_global_size(0);
 
-    int len = get_global_size(0) / get_local_size(0);
+    float f = 0.0f;
+    for (int i = 0; i < bsize; i++)
+        f += values[i * nfeatures + g] / (float)bsize;
 
-    result[l] += values[i] / (float)len;
+    result[g] = f;
 }
 
-// Calculate variance: sum (x - avg)^2 / n
+// Calculate variance: sum (x - avg)^2 / n of each feature
 __kernel
 void var(
+         int    bsize,
 __global float* avg,
 __global float* values,
 __global float* result){
 
-    int i = get_global_id(0);
-    int l = get_local_id(0);
+    int g         = get_global_id(0);
+    int nfeatures = get_global_size(0);
 
-    int len = get_global_size(0) / get_local_size(0);
+    float f = 0.0f;
+    for (int i = 0; i < bsize; i++)
+        f += pow(values[i * nfeatures + g] - avg[g], 2) / (float)bsize;
 
-    result[l] += pow(values[i] - avg[l], 2) / (float)len;
+    result[g] = f;
 }
 
 // Apply affine transform: y = gamma x + beta
@@ -428,12 +434,13 @@ __global float* act_grad){
 
     int len = get_local_size(0);
 
-    float norm_der = (1.0f - 1.0f/len) * (var[l] + EPSILON);
-    norm_der      -= (1.0f/len) * pow(pre_norm[i] - avg[l], 2.0f);
+    float norm_der = (1.0f - 1.0f/(float)len) * (var[l] + EPSILON);
+    norm_der      -= (1.0f/(float)len) * pow(pre_norm[i] - avg[l], 2.0f);
     norm_der      /= pow(var[l] + EPSILON, 1.5f);
 
 #ifdef DEBUG
-    printf("act_grad[%d]: %f * %f * %f\n", i, act_grad[i], gamma[l], norm_der);
+    printf("norm1d[%d]: %f * %f * %f\nx: %f avg: %f var:%f\n", 
+        i, act_grad[i], gamma[l], norm_der, pre_norm[i], avg[l], var[l]);
 #endif
 
     act_grad[i] = act_grad[i] * gamma[l] * norm_der;
