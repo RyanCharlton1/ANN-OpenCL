@@ -22,7 +22,7 @@ void Dense::calc_pre_act_values(){
 
 void Dense::normalise(){
     size_t work_size  = bsize * nunits;
-    size_t features = get_norm_size();
+    size_t features = get_features();
 
     float zero = 0.0f;
 
@@ -34,11 +34,11 @@ void Dense::normalise(){
 
     // Set initial average and variance calcs to zero
     status = clEnqueueFillBuffer(cl->command_queue, norm_avg_clmem,
-        &zero, sizeof(float), 0, nunits * sizeof(float), 0, NULL, NULL);
+        &zero, sizeof(float), 0, features * sizeof(float), 0, NULL, NULL);
     cl_print_err("norm_avg_clmem", status);
 
     status = clEnqueueFillBuffer(cl->command_queue, norm_var_clmem,
-        &zero, sizeof(float), 0, nunits * sizeof(float), 0, NULL, NULL);
+        &zero, sizeof(float), 0, features * sizeof(float), 0, NULL, NULL);
     cl_print_err("norm_var_clmem", status);
 
     clFinish(cl->command_queue);
@@ -49,7 +49,7 @@ void Dense::normalise(){
     call_kernel(cl, avg, 
         1, NULL, &features, NULL, 0, NULL, &avg_complete,
         // Args
-        bsize,
+        (norm == norm1d ? bsize : nunits * bsize),
         pre_act_values_clmem,
         norm_avg_clmem);
     
@@ -57,7 +57,7 @@ void Dense::normalise(){
     call_kernel(cl, var,
         1, NULL, &features, NULL, 1, &avg_complete, &var_complete,
         // Args
-        bsize,
+        (norm == norm1d ? bsize : nunits * bsize),
         norm_avg_clmem,
         pre_act_values_clmem,
         norm_var_clmem);
@@ -156,7 +156,6 @@ void Dense::calc_weight_grad(Function reg, float lambda){
             1, NULL, &global_size, NULL, 0, NULL, NULL,
             // Args
             bsize,
-            nunits,
             values_grad_clmem,
             bias_grad_clmem);
     }
@@ -192,14 +191,13 @@ void Dense::calc_value_grad(){
 
 void Dense::calc_norm_grad(){
     size_t work_size  = bsize * nunits;
-    size_t local_size = nunits;
+    size_t local_size = get_features();
 
     // Gamma gradient dAf/dg = N => dL/dg = dL/dAf * dAf/dg
     call_kernel(cl, gamma_grad,
         1, NULL, &local_size, NULL, 0, NULL, NULL,
         // Args
-        bsize, 
-        nunits,
+        (norm == norm1d ? bsize : nunits * bsize),
         pre_affine_values_clmem,
         values_grad_clmem,
         norm_gamma_grad_clmem);
@@ -209,7 +207,6 @@ void Dense::calc_norm_grad(){
         1, NULL, &local_size, NULL, 0, NULL, NULL,
         // Args
         bsize,
-        nunits,
         values_grad_clmem,
         norm_beta_grad_clmem);
 
@@ -259,7 +256,7 @@ std::string Dense::to_string(){
     if (norm != none){
         s += "gamma: [";
 
-        for (int i = 0; i < get_norm_size(); i++){
+        for (int i = 0; i < get_features(); i++){
             sprintf(buffer, "% .5f ", gamma_values[i]);
             s += buffer;
         }
@@ -269,7 +266,7 @@ std::string Dense::to_string(){
 
         s += "beta:  [";
 
-        for (int i = 0; i < get_norm_size(); i++){
+        for (int i = 0; i < get_features(); i++){
             sprintf(buffer, "% .5f ", beta_values[i]);
             s += buffer;
         }

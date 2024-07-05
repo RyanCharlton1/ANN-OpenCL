@@ -6,7 +6,8 @@
 #include <iostream>
 #include <map>
 
-#define FUNCTION_COUNT none
+// norm2d and none don't have distinct kernels to load
+#define FUNCTION_COUNT norm2d
 
 enum Function {
     mat_vec_mult,
@@ -30,7 +31,6 @@ enum Function {
     norm1d_der,
     gamma_grad,
     norm2d,
-    norm2d_der,
     none
 };
 

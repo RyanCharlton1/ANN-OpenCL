@@ -1,4 +1,4 @@
-// #define DEBUG
+//#define DEBUG
 
 // [0, .. cols] [v1]
 // [..        ] [v2]
@@ -102,15 +102,15 @@ void weight_grad(int    bsize,
 // Calculate each element of bias in one job, same as weight_grad
 __kernel 
 void bias_grad(int    bsize,
-               int    bias_size,
       __global float* values_grad,
       __global float* bias_grad){
 
-    int i = get_global_id(0);
+    int i         = get_global_id(0);
+    int nfeatures = get_global_size(0) / bsize;
 
     float f = 0.0f;
     for (int b = 0; b < bsize; b++)
-        f += values_grad[bias_size * b + i];
+        f += values_grad[nfeatures * b + i];
 
     f /= (float)bsize;
 
@@ -203,6 +203,7 @@ void MSE(__global float* y,
     int n = get_global_size(0);
     
     float err = y[i] - y_[i];
+
     x[i] = err * err / (float)n / 2.0f;
 
 #ifdef DEBUG
@@ -288,6 +289,7 @@ void cross_entropy_der(__global float* y,
     int i = get_global_id(0);
 
     der[i] = y_[i] - y[i];
+
 #ifdef DEBUG
     printf("cross_entropy_der[%d]: %f = %f - %f\n", i, der[i], y_[i], y[i]);
 #endif
@@ -449,23 +451,23 @@ __global float* act_grad){
 __kernel 
 void gamma_grad(
          int    bsize,
-         int    nunits,
 __global float* pre_affine_values,
 __global float* value_grad,
 __global float* gamma_grad){
 
-    int g = get_global_id(0);
+    int g         = get_global_id(0);
+    int nfeatures = get_global_size(0) / bsize;
 
     float f = 0.0f;
-
     for (int i = 0; i < bsize; i++){
         //printf("[%d]+= %f * %f\n", g, pre_affine_values[nunits * i + g], value_grad[nunits * i + g]);
-        f += pre_affine_values[nunits * i + g] 
-           * value_grad[nunits * i + g];
+        f += pre_affine_values[nfeatures * i + g] 
+           * value_grad[nfeatures * i + g];
     }
     f /= (float)bsize;
 
     gamma_grad[g] = f;
+
 #ifdef DEBUG
     printf("gamma_grad[%d]: %f\n", g, f);
 #endif

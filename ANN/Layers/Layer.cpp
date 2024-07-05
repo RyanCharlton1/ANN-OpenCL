@@ -13,14 +13,13 @@ Layer::Layer(int nunits, Function act, Function norm, bool bias){
     if (bias)         this->bias = new float[nunits];
 
     if (norm != none){
-        size_t size = get_norm_size();
+        size_t size = get_features();
         beta_values  = new float[size];
         gamma_values = new float[size];
 
         std::fill(beta_values, beta_values + size, 0.0f);
         std::fill(gamma_values, gamma_values + size, 1.0f);
     }
-
 }
 
 void Layer::init_cl_mem(Function opt, int bsize){
@@ -86,7 +85,7 @@ void Layer::init_norm_cl_mem(Function opt){
     float zero = 0.0f;
     float one  = 1.0f;
 
-    size_t size = get_norm_size() * sizeof(float);
+    size_t size = get_features() * sizeof(float);
 
     cl_int status;
 
@@ -200,16 +199,16 @@ void Layer::update(){
     apply_act();
 }
 
-int Layer::get_norm_size(){
+int Layer::get_features(){
     size_t size;
     switch (norm)
     {
-    case norm1d:
-        size = nunits;
-        break;
-
     case norm2d:
         size = 1;
+        break;
+
+    default:
+        size = nunits;
         break;
     }
 
@@ -235,7 +234,7 @@ void Layer::cl_to_host_weights() {
 }
 
 void Layer::cl_to_host_norm(){
-    size_t size = get_norm_size() * sizeof(float);
+    size_t size = get_features() * sizeof(float);
 
     cl_int status = clEnqueueReadBuffer(
         cl->command_queue, norm_beta_clmem, CL_FALSE, 0, 
@@ -286,7 +285,7 @@ void Layer::zero_adam_avgs(){
 void Layer::zero_adam_norm(){
     float zero = 0.0f;
 
-    size_t size = get_norm_size() * sizeof(float);
+    size_t size = get_features() * sizeof(float);
 
     cl_int status;
     status = clEnqueueFillBuffer(
@@ -366,7 +365,7 @@ void Layer::apply_act(){
 
 void Layer::optimise(Function optimiser, float learn_rate, int instance){
     size_t nweights_sizet = nweights;
-    size_t nbias_sizet    = nunits;
+    size_t nbias_sizet    = get_features();
 
     switch (optimiser){
         case GrdDsc:
@@ -449,6 +448,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
             }
             break;
     }
+    clFinish(cl->command_queue);
 }
 
 void Layer::calc_act_grad(){

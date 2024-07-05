@@ -299,7 +299,7 @@ float Network::calc_loss(int bsize){
     return l;
 }
 
-void Network::calc_output_value_grad(int dsize){
+void Network::calc_output_value_grad(int bsize){
     // Cross entropy derivative is combined with softmax in the loss
     // calculation and stored in out_values_grad already.
     if (loss == cross_entropy)
@@ -312,7 +312,7 @@ void Network::calc_output_value_grad(int dsize){
 
     // Multiply activation grad by loss grad to get dL/dz
     size_t out_nunits = out_layer->get_nunits();
-    size_t work_size  = dsize * out_nunits;
+    size_t work_size  = bsize * out_nunits;
     call_kernel(&cl, vec_vec_mult,
         1, NULL, &work_size, NULL, 0, NULL, NULL,
         // Args
@@ -340,7 +340,7 @@ float Network::fit_batch_cl(
 
     // Calculate value gradient at last layer by multiplying its
     // act gradient by loss gradient, dL/dy = dL/dA * dA/dy
-    calc_output_value_grad(bsize * dsize);
+    calc_output_value_grad(bsize);
 
     // Backpropagate
     for (int i = layers.size() - 1; i >= 0; i--){

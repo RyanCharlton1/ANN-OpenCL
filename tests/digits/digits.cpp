@@ -13,16 +13,13 @@
 
 int main(){ 
     Network n(IMAGESIZE);
-    n.add_layer(new Conv(28, 28, 1, 1, 5, 5, ReLU));
-    n.add_layer(new Conv(24, 24, 1, 1, 5, 5, ReLU));
-    n.add_layer(new Conv(20, 20, 1, 1, 5, 5, ReLU));
-    n.add_layer(new Conv(16, 16, 1, 1, 5, 5, ReLU));
-    n.add_layer(new Conv(12, 12, 1, 1, 5, 5, ReLU));
+    n.add_layer(new Conv(28, 28, 1, 7, 7, 2, 1, 1, ReLU));
+    n.add_layer(new Conv(22, 22, 2, 7, 7, 4, 1, 1, ReLU));
+    n.add_layer(new Conv(16, 16, 4, 7, 7, 8, 1, 1, ReLU));
+    //n.add_layer(new Dense(10, softmax));
+    //n.add_layer(new Dense(512, ReLU));
+    //n.add_layer(new Dense(512, ReLU));
     n.add_layer(new Dense(10, softmax));
-    //n.add_layer(new Dense(10, softmax));
-    //n.add_layer(new Dense(512, ReLU));
-    //n.add_layer(new Dense(512, ReLU));
-    //n.add_layer(new Dense(10, softmax));
     n.compile(1e-3, cross_entropy, adam); //l2_reg, 0.01f);
 
     DigitData d = load_digits();
