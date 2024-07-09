@@ -296,7 +296,7 @@ float Network::calc_loss(int bsize){
 
     delete[] loss_arr;
     //std::cout << "Loss: " << l;
-    return l;
+    return l / (float)bsize;
 }
 
 void Network::calc_output_value_grad(int bsize){
