@@ -98,8 +98,9 @@ public:
     void init_norm_cl_mem(Function opt);
 
     void zero_adam_avgs();
-
     void zero_adam_norm();
+
+    void init_weights();
 
     // Calc new values by feed forward
     void update();

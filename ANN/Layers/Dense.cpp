@@ -92,31 +92,7 @@ void Dense::connect(Layer* prev){
     nweights    = prev_nunits * nunits;
     weights     = new float[nweights];
 
-    // Init weights with glorot
-    float half_range;
-    float range;
-    switch(act){
-    case ReLU:
-    case leaky_ReLU:
-        // Xavier initlisation
-        half_range = sqrtf(6.0 / (prev_nunits + nunits));
-        break;
-    
-    case softmax:
-        // Glorot initialisation
-        half_range = sqrt(3.0 / (prev_nunits + nunits));
-        break;
-    }
-
-
-    range = 2.0f * half_range;
-
-    for (int i = 0; i < nweights; i++)
-        weights[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
-
-    if (has_bias)
-        for (int i = 0; i < nunits; i++)
-            bias[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
+    init_weights();
 }
  
 void Dense::calc_weight_grad(Function reg, float lambda){

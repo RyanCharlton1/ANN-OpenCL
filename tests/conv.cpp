@@ -22,9 +22,9 @@ int main(){
         expected[i * 9 + n] = 1.0f;
     }
 
-    n.fit(values, 9, expected, 9, BATCHES, BATCHSIZE, EPOCHS);
+    //n.fit(values, 9, expected, 9, BATCHES, BATCHSIZE, EPOCHS);
 
-    //n.calc(values, 9);
+    n.calc(values, 9);
     std::cout << n.trace();
 
     return 0;

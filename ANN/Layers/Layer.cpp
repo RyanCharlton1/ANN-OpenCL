@@ -1,5 +1,7 @@
 #include <ANN/Layers/Layer.h>
 
+#include <cmath>
+
 Layer::Layer(int nunits, Function act, Function norm, bool bias){
     this->nunits   = nunits;
     this->act      = act;
@@ -307,6 +309,35 @@ void Layer::zero_adam_norm(){
         cl->command_queue, adam_gamma_square_clmem, &zero, sizeof(float), 
         0, size, 0, NULL, NULL);  
     cl_print_err("adam_gamma_square_clmem", status);
+}
+
+void Layer::init_weights(){
+    float half_range;
+    float range;
+    
+    switch(act){
+    case ReLU:
+    case leaky_ReLU:
+        // Xavier initlisation
+        half_range = sqrtf(6.0 / (prev_nunits + nunits));
+        break;
+    
+    case softmax:
+        // Glorot initialisation
+        half_range = sqrt(3.0 / (prev_nunits + nunits));
+        break;
+    }
+
+
+    range = 2.0f * half_range;
+
+    for (int i = 0; i < nweights; i++)
+        weights[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
+
+    if (has_bias)
+        for (int i = 0; i < nunits; i++)
+            bias[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
+
 }
 
 void Layer::add_bias(){
