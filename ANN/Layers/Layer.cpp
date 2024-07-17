@@ -399,85 +399,84 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
     size_t nbias_sizet    = get_features();
 
     switch (optimiser){
-        case GrdDsc:
+    case GrdDsc:
+        call_kernel(cl, GrdDsc,
+            1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
+            // Args
+            learn_rate,
+            weights_clmem,
+            weights_grad_clmem);
+
+        if (has_bias)
             call_kernel(cl, GrdDsc,
-                1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
+                1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
-                weights_clmem,
-                weights_grad_clmem);
-
-
-            if (has_bias)
-                call_kernel(cl, GrdDsc,
-                    1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
-                    // Args
-                    learn_rate,
-                    bias_clmem,
-                    bias_grad_clmem);
-            
-            if (norm != none){
-                call_kernel(cl, GrdDsc,
-                    1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
-                    // Args
-                    learn_rate,
-                    norm_gamma_clmem,
-                    norm_gamma_grad_clmem);
-
-                call_kernel(cl, GrdDsc,
-                    1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
-                    // Args
-                    learn_rate,
-                    norm_beta_clmem,
-                    norm_beta_grad_clmem);
-            }
-            break; 
+                bias_clmem,
+                bias_grad_clmem);
         
-        case adam:
-            call_kernel(cl, adam, 
-                1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
+        if (norm != none){
+            call_kernel(cl, GrdDsc,
+                1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
-                weights_clmem,
-                weights_grad_clmem,
-                adam_weight_avg_clmem,
-                adam_weight_square_avg_clmem,
+                norm_gamma_clmem,
+                norm_gamma_grad_clmem);
+
+            call_kernel(cl, GrdDsc,
+                1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
+                // Args
+                learn_rate,
+                norm_beta_clmem,
+                norm_beta_grad_clmem);
+        }
+        break; 
+        
+    case adam:
+        call_kernel(cl, adam, 
+            1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
+            // Args
+            learn_rate,
+            weights_clmem,
+            weights_grad_clmem,
+            adam_weight_avg_clmem,
+            adam_weight_square_avg_clmem,
+            instance);
+
+        if (has_bias){
+            call_kernel(cl, adam,
+                1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
+                // Args
+                learn_rate,
+                bias_clmem,
+                bias_grad_clmem,
+                adam_bias_avg_clmem,
+                adam_bias_square_avg_clmem,
                 instance);
+        }
 
-            if (has_bias){
-                call_kernel(cl, adam,
-                    1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
-                    // Args
-                    learn_rate,
-                    bias_clmem,
-                    bias_grad_clmem,
-                    adam_bias_avg_clmem,
-                    adam_bias_square_avg_clmem,
-                    instance);
-            }
-
-            if (norm != none){
-                call_kernel(cl, adam,
-                    1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
-                    // Args
-                    learn_rate,
-                    norm_gamma_clmem,
-                    norm_gamma_grad_clmem,
-                    adam_gamma_avg_clmem,
-                    adam_gamma_square_clmem,
-                    instance);
-
-                call_kernel(cl, adam,
-                    1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
-                    // Args
-                    learn_rate,
-                    norm_beta_clmem,
-                    norm_beta_grad_clmem,
-                    adam_beta_avg_clmem,
-                    adam_beta_square_clmem,
-                    instance);
-            }
-            break;
+        if (norm != none){
+            call_kernel(cl, adam,
+                1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
+                // Args
+                learn_rate,
+                norm_gamma_clmem,
+                norm_gamma_grad_clmem,
+                adam_gamma_avg_clmem,
+                adam_gamma_square_clmem,
+                instance);
+                
+            call_kernel(cl, adam,
+                1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
+                // Args
+                learn_rate,
+                norm_beta_clmem,
+                norm_beta_grad_clmem,
+                adam_beta_avg_clmem,
+                adam_beta_square_clmem,
+                instance);
+        }
+        break;
     }
     clFinish(cl->command_queue);
 }

@@ -169,6 +169,14 @@ const char* function_to_string(Function f){
         return "norm1d_der";
     case gamma_grad:
         return "gamma_grad";
+    case convolution:
+        return "convolution";
+    case deconvolution:
+        return "deconvolution";
+    case pad_and_dilate:
+        return "pad_and_dilate";
+    case convolution_weight_grads:
+        return "convolution_weight_grads";
     }
     return "error";
 }
@@ -228,6 +236,14 @@ const char* function_arg_string(Function f){
         return "ccccc";
     case gamma_grad:
         return "iccc";
+    case convolution:
+        return "iiiiiiiiccc";
+    case deconvolution:
+        return "iiiiiccc";
+    case pad_and_dilate:
+        return "iiiiiicc";
+    case convolution_weight_grads:
+        return "iiiiiiiccc";
     }
     return "error";
 }

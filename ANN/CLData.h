@@ -30,6 +30,10 @@ enum Function {
     norm1d,
     norm1d_der,
     gamma_grad,
+    convolution,
+    deconvolution,
+    pad_and_dilate,
+    convolution_weight_grads,
     norm2d,
     none
 };

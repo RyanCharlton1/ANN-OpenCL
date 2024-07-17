@@ -41,7 +41,7 @@ void vec_vec_mult(__global float* vec_a,
     vec_c[i] = vec_a[i] * vec_b[i];
 
 #ifdef DEBUG
-    printf("vec_vec_mult %d:%f*%f\n", i, vec_a[i], vec_b[i]);
+    printf("vec_vec_mult[%d]:%f*%f\n", i, vec_a[i], vec_b[i]);
 #endif
 }
 
@@ -225,7 +225,7 @@ void MSE_der(int    size,
     der[i] = -err / (float)size;
 
 #ifdef DEBUG
-    printf("MSE_der:%f = -%f / %f\n", der[i], err, (float)size);
+    printf("MSE_der[%d]:%f = -%f / %f\n", i, der[i], err, (float)size);
 #endif
 }
 
@@ -365,9 +365,15 @@ __global float* result){
 
     float f = 0.0f;
     for (int i = 0; i < bsize; i++)
-        f += values[i * nfeatures + g] / (float)bsize;
+        f += values[i * nfeatures + g];
+
+    f /= (float)bsize;
 
     result[g] = f;
+
+#ifdef DEBUG
+    printf("avg[%d]: %f\n", g, f);
+#endif
 }
 
 // Calculate variance: sum (x - avg)^2 / n of each feature
@@ -470,5 +476,269 @@ __global float* gamma_grad){
 
 #ifdef DEBUG
     printf("gamma_grad[%d]: %f\n", g, f);
+#endif
+}
+
+// Filters: features[filterh[filterw[channels]]]
+// Values:  batches[prevh[prevw[channels]]]
+// result:  batches[filtersy[filtersx[features]]]
+__kernel
+void convolution(
+         int    prevw,
+         int    prevh,
+         int    filtersy,
+         int    filterw,
+         int    filterh,
+         int    channels,
+         int    stridex,
+         int    stridey,
+__global float* filters,
+__global float* values,
+__global float* result){
+
+    int filtery = get_global_id(0);
+    int filterx = get_global_id(1);
+    int feature = get_global_id(2);
+
+    int filtersx   = get_global_size(1);
+    int features = get_global_size(2);
+
+    int batch = filtery / filtersy;
+    filtery %= filtersy;
+
+    // Index of filter being applied from filter list
+    int filters_index = feature * filterh * filterw * channels;
+
+    int image_start;
+    // Start at batch's(image's) 0,0
+    image_start  = batch * prevh * prevw ;
+    // Move to start of filter within batch
+    int filter_start;
+    filter_start  = image_start;
+    filter_start += filtery * stridey * prevw + filterx * stridex;
+
+    int unit_index = (filtery * filtersx + filterx) * features + feature;
+    
+
+    float acc = 0.0f;
+    for (int y = 0; y < filterh; y++){
+        int filtery = filter_start + y * filterw;
+
+        for (int x = 0; x < filterw; x++){
+            int filterx = filtery + x;
+            int filterc = filterx * channels;
+
+            for (int c = 0; c < channels; c++){
+                acc += values[filterc + c] * filters[filters_index];
+                filters_index++;
+            }
+        }
+    }
+
+    // Index of output node being calculated
+    int result_index;
+    result_index  = batch * filtersy * filtersx;
+    result_index += filtery * filtersx;
+    result_index += filterx;
+    result_index *= features;
+    result_index += feature;
+
+    result[result_index] = acc;
+
+#ifdef DEBUG
+    printf("conv[%d]: %f\n", result_index, acc);
+#endif
+}
+
+// value_grads batches[height[width[features]]]
+__kernel
+void pad_and_dilate(
+         int    filterw,
+         int    filterh,
+         int    stridex,
+         int    stridey,
+         int    output_size,
+         int    bsize,
+__global float* value_grads,
+__global float* output){
+
+    int y = get_global_id(0);
+    int x = get_global_id(1);
+    int c = get_global_id(2);
+
+    int gradsh = get_global_size(0) / bsize;
+    int gradsw = get_global_size(1);
+    int gradsc = get_global_size(2);
+
+    int batch = y / gradsh;
+    y %= gradsh;
+
+    // grads(w/h) is number of filters(x/y) 
+    int output_cols = filterw + (gradsw - 1) * stridex + filterw - 1;
+
+    int grads_size     = gradsh * gradsw * gradsc;
+    int grads_row_size = gradsw * gradsc;
+
+    int grads_index;
+    grads_index  = batch * grads_size;
+    grads_index += y * grads_row_size;
+    grads_index += x * gradsc;
+    grads_index += c;
+
+    int output_index;
+    output_index  = batch * output_size;
+    output_index += (filterh - 1 + y * stridey) * output_cols * gradsc;
+    output_index += (filterw - 1 + x * stridex) * gradsc; 
+    output_index += c;
+
+    output[output_index] = value_grads[grads_index];
+
+#ifdef DEBUG
+    printf("pad[%d]: %d\n", output_index, grads_index);
+#endif
+}
+
+// Perform convolution on a padded output gradient image using reversed 
+// filters to find the gradients at input  
+// Filters: [features[filterh[filterw[channels]]]]
+// Grads:   batches[paddedh[paddedw[features]]]
+// Result: batches[prevh[prevw[channels]]]
+__kernel
+void deconvolution(
+         int    paddedw,
+         int    paddedh,
+         int    filterw,
+         int    filterh,
+         int    features,
+__global float* filters,
+__global float* value_grads,
+__global float* result){
+
+    int prevy   = get_global_id(0);
+    int prevx   = get_global_id(1);
+    int channel = get_global_id(2);
+
+    int prevh    = get_global_size(0);
+    int prevw    = get_global_size(1);
+    int channels = get_global_size(2);
+
+    int batch = prevy / prevh;
+    prevy %= prevh;
+
+    int fitler_size  = filterh * filterw * channels;
+
+    int result_index;
+    result_index  = batch * prevh * prevx;
+    result_index += prevy * prevw;
+    result_index += prevx;
+    result_index *= channels;
+    result_index += channel;
+
+    // First position of filter to use as filter is read backwards
+    // for each channel
+    int filter_index = fitler_size - channels + channel;
+
+    // Start of batch's grads image 0,0
+    int image_start = batch * paddedh * paddedw * features;
+    // Start of filter
+    int filter_start = image_start + prevy * paddedw + prevx;
+
+    float acc = 0.0f;
+    for (int y = 0; y < filterh; y++){
+        int filtery = filter_start + y * paddedw;
+
+        for (int x = 0; x < filterw; x++){
+            int filterx = filtery + x;
+            int filterf = filterx * features;
+
+            for (int f = 0; f < features; f++){
+                int feature_index = filter_index + f * fitler_size;
+
+                acc += value_grads[filterf + f] * filters[feature_index];
+                //printf("deconv[%d]: [%d](% .2f) * [%d](% .2f)\n", result_index, filterf + f, value_grads[filterf + f], feature_index, filters[feature_index]);
+            }
+
+            filter_index -= channels;
+        }
+    }
+
+    result[result_index] = acc;
+
+#ifdef DEBUG
+    printf("deconv[%d]: %f\n", result_index, acc);
+#endif
+}
+
+// Weight gradients are the result of applying convolution to the input 
+// vlaues using the output grads dilated by stride - 1 as the filter. 
+// Values:  batches[prevh[prevw[channels]]]
+// Grads:   batches[paddedh[paddedw[features]]]
+// Result:  features[filterh[filterw[channels]]]
+__kernel 
+void convolution_weight_grads(
+         int    prev_size,
+         int    prevw,
+         int    padded_size,
+         int    paddedw,
+         int    paddedh,
+         int    channels,
+         int    bsize,
+__global float* values,
+__global float* padded_grads,
+__global float* weight_grad){
+    
+    int weighty = get_global_id(0);
+    int weightx = get_global_id(1);
+    int channel = get_global_id(2);
+
+    int filterh  = get_global_size(0);
+    int filterw  = get_global_size(1);
+    int features = get_global_size(2) / channels;
+
+    // Max 3 dimensions for work group, include channels and features 
+    // as one dimension of features x channels
+    int feature = channel / channels;
+    channel %= channels;
+
+    // printf("channels: %d features: %d\n", channels, features);
+    // printf("weighty: %d weightx: %d channel:%d feature:%d\n", weighty, weightx, channel, feature);
+
+    int weight_index;
+    weight_index  = feature * filterh * filterw;
+    weight_index += weighty * filterw;
+    weight_index += weightx;
+    weight_index *= channels;
+    weight_index += channel;
+
+    int values_start = weighty * prevw + weightx;
+
+    float acc = 0.0f;
+    for (int y = 0; y < paddedh; y++){
+        int valuesy = values_start + y * prevw;
+        int gradsy  = y * paddedw;
+
+        for (int x = 0; x < paddedw; x++){
+            int valuesx = valuesy + x;
+            int valuesc = valuesx * channels + channel;    
+            int gradsx  = gradsy + x;
+            int gradsc  = gradsx * features + feature;
+            //printf("y: %d x: %d c: %d\n", gradsy, gradsx, gradsc);
+
+            for (int b = 0; b < bsize; b++){
+                int valuesb = valuesc + b * prev_size;
+                int gradsb  = gradsc + b * padded_size;
+
+                acc += values[valuesb] * padded_grads[gradsb];
+                //printf("conv_grad[%d] += [%d](% .2f) * [%d](% .2f)\n", weight_index, valuesb, values[valuesb], gradsb, padded_grads[gradsb]);
+            }
+        }
+    }
+
+    acc /= (float)bsize;
+
+    weight_grad[weight_index] = acc;
+
+#ifdef DEBUG 
+    printf("conv_grad[%d]: %f\n", weight_index, acc);
 #endif
 }
