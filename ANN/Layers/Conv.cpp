@@ -11,7 +11,7 @@ void Conv::init_cl_mem(Function opt, int bsize){
     //padded_values_grad_size *= bsize;
 
     dilated_values_grad_size  = 1 + (outx - 1) * stridex;
-    dilated_values_grad_size += 1 + (outy - 1) * stridey;
+    dilated_values_grad_size *= 1 + (outy - 1) * stridey;
     dilated_values_grad_size *= features;
 
     padded_values_grad_clmem = alloc_buffer(
@@ -89,6 +89,8 @@ void Conv::calc_loss_grad(){
         values_grad_clmem,
         padded_values_grad_clmem);
 
+    clFinish(cl->command_queue);
+
     call_kernel(
         cl, deconvolution,
         3, NULL, deconv_work_size, NULL, 1, &padded, NULL,
@@ -122,6 +124,7 @@ void Conv::calc_weight_grad(Function reg, float lambda){
         bsize,
         values_grad_clmem,
         dilated_values_grad_clmem);
+
 
     call_kernel(
         cl, convolution_weight_grads,

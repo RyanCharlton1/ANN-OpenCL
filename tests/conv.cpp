@@ -1,7 +1,7 @@
 #include <ANN/Network.h>
 #include <ANN/Layers/Conv.h>
 
-#define BATCHES   5
+#define BATCHES   50
 #define BATCHSIZE 10
 #define EPOCHS    5
 
@@ -11,13 +11,14 @@ int main(){
     Network n(INPUTSIZE);
     n.add_layer(new Conv(3, 3, 2, 2, 2, 3, 1, 1, leaky_ReLU, none, false));
     n.add_layer(new Conv(2, 2, 3, 2, 2, 1, 1, 1, leaky_ReLU, none, false));
+    n.add_layer(new Dense(1, leaky_ReLU));
     n.compile(1e-2, MSE, GrdDsc);
 
     std::cout << n.to_string();
 
     float values  [INPUTSIZE * BATCHSIZE * BATCHES];
     float expected[BATCHSIZE * BATCHES];
-    std::fill(values,   values   + INPUTSIZE * BATCHSIZE * BATCHES, 0.0f);
+    std::fill(values,   values + INPUTSIZE * BATCHSIZE * BATCHES, 0.0f);
     //std::fill(expected, expected + 9 * BATCHSIZE * BATCHES, 0.0f);
 
     for (int i = 0; i < BATCHSIZE * BATCHES; i++){

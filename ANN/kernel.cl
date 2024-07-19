@@ -570,20 +570,18 @@ __global float* output){
     int gradsw = get_global_size(1);
     int gradsc = get_global_size(2);
 
-    int batch = y / gradsh;
-    y %= gradsh;
-
     // grads(w/h) is number of filters(x/y) 
     int output_cols = filterw + (gradsw - 1) * stridex + filterw - 1;
 
-    int grads_size     = gradsh * gradsw * gradsc;
     int grads_row_size = gradsw * gradsc;
 
     int grads_index;
-    grads_index  = batch * grads_size;
-    grads_index += y * grads_row_size;
+    grads_index  = y * grads_row_size;
     grads_index += x * gradsc;
     grads_index += c;
+    
+    int batch = y / gradsh;
+    y %= gradsh;
 
     int output_index;
     output_index  = batch * output_size;
