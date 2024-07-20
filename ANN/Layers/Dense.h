@@ -5,8 +5,8 @@
 class Dense : public Layer{
 
 public:
-    Dense(int nunits, Function act, Function norm=none, bool bias=true) 
-    : Layer(nunits, act, norm, bias) {}
+    Dense(int nunits, Function act, bool norm=false, bool bias=true) 
+    : Layer(nunits, act, norm, bias) { features = nunits; }
     
     // Past values mutliplied by weights
     void calc_pre_act_values() override;
@@ -17,9 +17,9 @@ public:
     // Calculate weight grad dL/dw by multilpying dL/dy * dy/dw(z)
     void calc_weight_grad(Function reg, float lambda) override;
     // Calculate prev Layer's loss_grad dL/dA by multiplying dL/dy and dy/dA(w^T)
-    void calc_loss_grad() override;
+    void calc_prev_output_grad() override;
     // Calculate value_grad by multiplying dL/dA and dA/dz
-    void calc_value_grad() override;
+    void calc_input_grad() override;
     // Calculate normalisation grad and combine in act_grad_clmem 
     // by multiplying dA/dAf * dAf/dN * dN/dz. Also calculate norm param
     // grads

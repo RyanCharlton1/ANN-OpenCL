@@ -5,11 +5,15 @@ void Conv::init_cl_mem(Function opt, int bsize){
 
     float zero = 0.0f;
 
+    // Backwards pass is calculated by convolution of reversed filters
+    // over output gradients padded by filter dimension -1 and 
+    // dilated by stride -1
     padded_values_grad_size  = filterw + (outx - 1) * stridex + filterw - 1;
     padded_values_grad_size *= filterh + (outy - 1) * stridey + filterh - 1;
     padded_values_grad_size *= features;
-    //padded_values_grad_size *= bsize;
 
+    // Weight gradients are calculated by convolution of previous Layer's
+    // values with output gradients dliated by stride -1
     dilated_values_grad_size  = 1 + (outx - 1) * stridex;
     dilated_values_grad_size *= 1 + (outy - 1) * stridey;
     dilated_values_grad_size *= features;
@@ -41,15 +45,15 @@ void Conv::free_cl_mem(){
 }
 
 void Conv::connect(Layer* prev){
-    this->prev  = prev; 
-    prev_nunits = prev->get_nunits();
-    nweights    = features * filterh * filterw * prevc;
-    weights     = new float[nweights];
-
-    init_weights();
+    Layer::connect(prev);
+    // Filters share channel dimension with previous Layer
+    init_weights(features * filterh * filterw * prevc);
 }
 
+// Perform convolution using opencl kernel 
 void Conv::calc_pre_act_values(){
+    // outx and outy are the amount of masks that can be applied to the
+    // input image forming the output image's dimensions
     size_t work_size[3] = { bsize * outy, outx, features };
 
     call_kernel(
@@ -71,7 +75,10 @@ void Conv::calc_pre_act_values(){
     clFinish(cl->command_queue);
 }
 
-void Conv::calc_loss_grad(){
+// Calculate input gradients by applying reversed filters to padded and 
+// dilated output gradients
+// https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
+void Conv::calc_prev_output_grad(){
     size_t pad_work_size[3]    = { bsize * outy, outx, features };
     size_t deconv_work_size[3] = { bsize * prevh, prevw, prevc};
     cl_event padded;
@@ -86,10 +93,8 @@ void Conv::calc_loss_grad(){
         stridey,
         padded_values_grad_size,
         bsize,
-        values_grad_clmem,
+        input_grad_clmem,
         padded_values_grad_clmem);
-
-    clFinish(cl->command_queue);
 
     call_kernel(
         cl, deconvolution,
@@ -102,11 +107,14 @@ void Conv::calc_loss_grad(){
         features,
         weights_clmem,
         padded_values_grad_clmem,
-        prev->get_loss_grad_clmem());
+        prev->get_output_grad_clmem());
 
     clFinish(cl->command_queue);
 }
 
+// Calculate weight gradients by applying previous Layer's values to
+// padded and dilated output gradients
+// https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
 void Conv::calc_weight_grad(Function reg, float lambda){
     size_t pad_work_size[3]  = { bsize * outy, outx, features };
     size_t grad_work_size[3] = { filterh, filterw, prevc * features };
@@ -122,9 +130,8 @@ void Conv::calc_weight_grad(Function reg, float lambda){
         stridey,
         dilated_values_grad_size,
         bsize,
-        values_grad_clmem,
+        input_grad_clmem,
         dilated_values_grad_clmem);
-
 
     call_kernel(
         cl, convolution_weight_grads,
@@ -148,80 +155,13 @@ void Conv::calc_weight_grad(Function reg, float lambda){
     clFinish(cl->command_queue);
 }
 
-// void Conv::init_cl_mem(Function opt, int bsize=1){
-//     Layer::init_cl_mem(opt, bsize);
-    
-//     weights_grads_pre_batch_clmem = alloc_buffer(
-//         cl->context, "weights_grads_pre_batch_clmem", 
-//         bsize * nweights * sizeof(float));
-
-//     loss_grads_pre_sum_clmem = alloc_buffer(
-//         cl->context, "loss_grads_pre_sum_clmem", nunits * outx * outy);
-// }
-
-// void Conv::free_cl_mem(){
-//     Layer::free_cl_mem();
-
-//     clReleaseMemObject(weights_grads_pre_batch_clmem);
-//     clReleaseMemObject(loss_grads_pre_sum_clmem);
-// }
-
-// void Conv::calc_pre_act_values(){
-//     size_t work_size[3] = { outy * bsize,
-//                             outx,
-//                             features };
-
-//     call_kernel(cl, convolution,
-//         3, NULL, work_size, NULL, 0, NULL, NULL,
-//         // Args
-//         maskx,
-//         masky,
-//         prevz,
-//         stridex,
-//         stridey,
-//         prevx,
-//         nweights,
-//         bsize,
-//         weights_clmem,
-//         prev->get_values_clmem(),
-//         pre_act_values_clmem,
-//         weights_grads_pre_batch_clmem);
-
-//     clFinish(cl->command_queue);
-// }
-
-// void Conv::connect(Layer* prev){
-//     this->prev  = prev; 
-//     prev_nunits = prev->get_nunits();
-//     nweights    = nunits * masky * maskx * prevz;
-//     weights     = new float[nweights];
-
-//     init_weights();
-// }
-
-// void Conv::calc_weight_grad(Function reg, float lambda){
-//     size_t work_size[1] = { nweights };
-
-//     call
-
-//     call_kernel(cl, avg,
-//         1, NULL, work_size, NULL, 0, NULL, NULL,
-//         // Args
-//         bsize,
-//         weights_grads_pre_batch_clmem,
-//         weights_grad_clmem);
-// }
-
-// void Conv::calc_loss_grad(){
-    
-// }
-
 std::string Conv::to_string(){
     char buffer[16];
     std::string s;
 
     int mask_size = filterh * filterw * prevc;
 
+    // Print each mask on a single line for easier reading 
     for (int i = 0; i < features; i++){
         s += "[";
 
@@ -245,9 +185,8 @@ std::string Conv::to_string(){
         s += "]\n";
     }
 
-
     // Print beta and gamma 
-    if (norm != none){
+    if (norm){
         s += "gamma: [";
 
         for (int i = 0; i < features; i++){

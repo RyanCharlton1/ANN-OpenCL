@@ -5,6 +5,7 @@
 #include <cstring>
 #include <string>
 
+// Output are the result of multiplying the weight matrix by the input vlaues
 void Dense::calc_pre_act_values(){
     size_t work_size = bsize * nunits;
     
@@ -20,9 +21,11 @@ void Dense::calc_pre_act_values(){
     clFinish(cl->command_queue);
 }
 
+// Use 1D batch normalisation before outputing values. 1D normalises each
+// feature across the batch
 void Dense::normalise(){
-    size_t work_size  = bsize * nunits;
-    size_t features = get_features();
+    size_t work_size     = bsize * nunits;
+    size_t features_size = features;
 
     float zero = 0.0f;
 
@@ -47,24 +50,24 @@ void Dense::normalise(){
 
     // Calculate each feature's average across batches
     call_kernel(cl, avg, 
-        1, NULL, &features, NULL, 0, NULL, &avg_complete,
+        1, NULL, &features_size, NULL, 0, NULL, &avg_complete,
         // Args
-        (norm == norm1d ? bsize : nunits * bsize),
+        bsize,
         pre_act_values_clmem,
         norm_avg_clmem);
     
     // Calculate each feature's variance across batches
     call_kernel(cl, var,
-        1, NULL, &features, NULL, 1, &avg_complete, &var_complete,
+        1, NULL, &features_size, NULL, 1, &avg_complete, &var_complete,
         // Args
-        (norm == norm1d ? bsize : nunits * bsize),
+        bsize,
         norm_avg_clmem,
         pre_act_values_clmem,
         norm_var_clmem);
     
     // Normalise the values using each features variance and average
     call_kernel(cl, norm1d,
-        1, NULL, &work_size, &features, 1, &var_complete, &norm_complete,
+        1, NULL, &work_size, &features_size, 1, &var_complete, &norm_complete,
         // Args
         pre_act_values_clmem,
         norm_avg_clmem,
@@ -77,7 +80,7 @@ void Dense::normalise(){
 
     // Apply affine transformation to normalised values
     call_kernel(cl, affine, 
-        1, NULL, &work_size, &features, 1, &norm_complete, NULL,
+        1, NULL, &work_size, &features_size, 1, &norm_complete, NULL,
         // Args
         pre_act_values_clmem,
         norm_gamma_clmem,
@@ -86,15 +89,16 @@ void Dense::normalise(){
     clFinish(cl->command_queue);
 }
 
+// Connect to previous Layer and initialise weights
 void Dense::connect(Layer* prev){
-    this->prev  = prev; 
-    prev_nunits = prev->get_nunits();
-    nweights    = prev_nunits * nunits;
-    weights     = new float[nweights];
+    Layer::connect(prev);
 
-    init_weights();
+    init_weights(prev_nunits * nunits);
 }
  
+// Weight gradients calculated by multiplying the output gradients by the
+// input values that each weight connects. These are average over the batch.
+// Bias is the special case where the input value is always 1.
 void Dense::calc_weight_grad(Function reg, float lambda){
     cl_mem prev_values_clmem = prev->get_values_clmem();
 
@@ -109,10 +113,11 @@ void Dense::calc_weight_grad(Function reg, float lambda){
         bsize,
         nunits,
         prev_nunits,
-        values_grad_clmem,
+        input_grad_clmem,
         prev_values_clmem,
         weights_grad_clmem);
 
+    // TODO: fix regularisation
     switch (reg){
     case l2_reg:
         call_kernel(cl, l2_reg, 
@@ -132,12 +137,15 @@ void Dense::calc_weight_grad(Function reg, float lambda){
             1, NULL, &global_size, NULL, 0, NULL, NULL,
             // Args
             bsize,
-            values_grad_clmem,
+            input_grad_clmem,
             bias_grad_clmem);
     }
 }
 
-void Dense::calc_loss_grad(){
+// The gradient at a pervious Layer's node is the sum of the gradients 
+// of the nodes it connects to multiplied by the weights connecting them.
+// Calculate this by multiplying the input gradients by the weights transposed.
+void Dense::calc_prev_output_grad(){
     size_t global_size = bsize * prev_nunits;
 
     call_kernel(cl, mat_vec_mult_trans,
@@ -146,36 +154,41 @@ void Dense::calc_loss_grad(){
         nunits,
         prev_nunits,
         weights_clmem,
-        values_grad_clmem,
-        prev->get_loss_grad_clmem());    
+        input_grad_clmem,
+        prev->get_output_grad_clmem());    
 
     clFinish(cl->command_queue);
 }
 
-void Dense::calc_value_grad(){
+// Calculate input gradient by appying the activation function gradient 
+// to the output gradient. If using normalisation, this is not the final
+// result.
+void Dense::calc_input_grad(){
     size_t global_size = bsize * nunits;
 
     call_kernel(cl, vec_vec_mult,
         1, NULL, &global_size, NULL, 0, NULL, NULL,
         // Args
-        loss_grad_clmem,
+        output_grad_clmem,
         act_grad_clmem,
-        values_grad_clmem);
+        input_grad_clmem);
 
     clFinish(cl->command_queue);
 }
 
+// Calculate the affine transformation gradients and gradients for the 
+// pre normalisation values.
 void Dense::calc_norm_grad(){
     size_t work_size  = bsize * nunits;
-    size_t local_size = get_features();
+    size_t local_size = features;
 
     // Gamma gradient dAf/dg = N => dL/dg = dL/dAf * dAf/dg
     call_kernel(cl, gamma_grad,
         1, NULL, &local_size, NULL, 0, NULL, NULL,
         // Args
-        (norm == norm1d ? bsize : nunits * bsize),
+        bsize,
         pre_affine_values_clmem,
-        values_grad_clmem,
+        input_grad_clmem,
         norm_gamma_grad_clmem);
 
     // Beta gradient dA/db = 1 => dL/db = dL/dAf * dAf/db
@@ -183,9 +196,10 @@ void Dense::calc_norm_grad(){
         1, NULL, &local_size, NULL, 0, NULL, NULL,
         // Args
         bsize,
-        values_grad_clmem,
+        input_grad_clmem,
         norm_beta_grad_clmem);
 
+    // Derivation for normalisation derivative is in README
     call_kernel(cl, norm1d_der,
         1, NULL, &work_size, &local_size, 0, NULL, NULL,
         // Args
@@ -193,7 +207,7 @@ void Dense::calc_norm_grad(){
         norm_avg_clmem,
         norm_var_clmem,
         norm_gamma_clmem,
-        values_grad_clmem);
+        input_grad_clmem);
 
     clFinish(cl->command_queue);
 }
@@ -229,10 +243,10 @@ std::string Dense::to_string(){
     }
 
     // Print beta and gamma 
-    if (norm != none){
+    if (norm){
         s += "gamma: [";
 
-        for (int i = 0; i < get_features(); i++){
+        for (int i = 0; i < features; i++){
             sprintf(buffer, "% .5f ", gamma_values[i]);
             s += buffer;
         }
@@ -242,7 +256,7 @@ std::string Dense::to_string(){
 
         s += "beta:  [";
 
-        for (int i = 0; i < get_features(); i++){
+        for (int i = 0; i < features; i++){
             sprintf(buffer, "% .5f ", beta_values[i]);
             s += buffer;
         }

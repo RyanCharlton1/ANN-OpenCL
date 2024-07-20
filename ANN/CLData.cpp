@@ -80,13 +80,17 @@ switch(error){
     }
 }
 
+// Print error message if error is not CL_SUCCESS
 void cl_print_err(const char* entry, cl_int error){
+    if (error == CL_SUCCESS)
+        return;
+
     char buffer[128];
     sprintf(buffer, "%-50s%s", entry, cl_errstr(error));
-    if (error != CL_SUCCESS)
-        std::cout << buffer << std::endl;
+    std::cout << buffer << std::endl;
 }
 
+// Free all OpenCL resources associated with CLdata
 void CLdata::free(){
     clReleaseCommandQueue(command_queue);
     clReleaseContext(context);
@@ -95,6 +99,7 @@ void CLdata::free(){
     delete[] device_list;
 }
 
+// Allocate a cl_mem object and handle errors
 cl_mem alloc_buffer(cl_context context, const char* name, 
     size_t size, void* data, cl_mem_flags flag){
 
@@ -112,10 +117,12 @@ cl_mem alloc_buffer(cl_context context, const char* name,
     return buffer;
 }
 
+// Function enum is incremented by 1 to get the derivative function
 Function derivative(Function f){
     return (Function)(f+1);
 }
 
+// Get Function enum as string, necerssary for loading kernels
 const char* function_to_string(Function f){
     switch (f)
     {
@@ -248,6 +255,7 @@ const char* function_arg_string(Function f){
     return "error";
 }
 
+// Enqueue kernel jobs with variadic arguments
 void call_kernel(CLdata* cl, Function fun, cl_uint work_dim, 
     const size_t* global_work_offset, const size_t* global_work_size,
     const size_t* local_work_size, cl_uint num_events_in_wait_list, 

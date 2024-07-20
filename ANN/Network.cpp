@@ -11,6 +11,7 @@
 #include <cmath>
 #include <stdlib.h>
 
+// Creare an OpenCL kernel object for function func
 void Network::create_kernel(Function func){
     cl_int status;
 
@@ -22,17 +23,18 @@ void Network::create_kernel(Function func){
     cl_print_err(buffer, status);
 }
 
+// Create a kernel object for each function 
 void Network::create_kernels(){
     for (int i = 0; i < FUNCTION_COUNT; i++)
         create_kernel((Function)i);
 }
 
+// Create all OpenCL objects for queueing and executing kernels
 Network::Network(int ninput){
     this->ninput = ninput;
     // Activation doesn't matter as it will never update()
     input = new Dense(ninput, ReLU);
     
-
     // Set up OpenCL to be called later
     // Get platform and device info 
     cl_platform_id* platforms = NULL;
@@ -109,6 +111,7 @@ Network::Network(int ninput){
     delete[] platforms;
 }
 
+// Free all memory associated with the Network and it's Layers
 Network::~Network(){
     for (Layer* l : layers)
         delete l;
@@ -117,6 +120,9 @@ Network::~Network(){
     delete input;
 }
 
+// Connect Layers, initing their memory, generating weights/bias, giving
+// opencl objects for calling kernels. Also seed random number generator
+// for weights and set params for training
 void Network::compile(
     float learn_rate, Function loss, Function opt, Function reg, float lambda){
     
@@ -126,8 +132,8 @@ void Network::compile(
     this->reg        = reg;
     this->lambda     = lambda;
 
-    // Temporary for debugging purposes
-    //srand(392840238490);
+    // For debugging purposes
+    // srand(392840238490);
     srand(time(NULL));
     input->set_cl(&cl);
     // Connect each Layer to the last, inits memory and sets vars 
@@ -140,6 +146,7 @@ void Network::compile(
     }
 }
 
+// Allocate gpu buffers for expected results and loss calculations
 void Network::init_clmem(int bsize){
     int output_size = get_output_layer()->get_nunits();    
     
@@ -155,12 +162,14 @@ void Network::init_clmem(int bsize){
         cl.context, "loss_grad_clmem", bsize * output_size * sizeof(float));
 }
 
+// Free gpu buffers
 void Network::free_clmem(){ 
     clReleaseMemObject(expected_clmem);
     clReleaseMemObject(loss_clmem);
     clReleaseMemObject(loss_grad_clmem);
 }
 
+// Copy expected results from host to gpu buffer
 void Network::host_to_cl_expected(float* exp, int esize){
     cl_int status = clEnqueueWriteBuffer(
         cl.command_queue, expected_clmem, CL_TRUE, 0, esize * sizeof(float),
@@ -170,23 +179,27 @@ void Network::host_to_cl_expected(float* exp, int esize){
     clFinish(cl.command_queue);
 }
 
+// Copy weights from gpu to host for each Layer
 void Network::cl_to_host_weights(){
     for (Layer* layer : layers)
         layer->cl_to_host_weights();
 }
 
+// Copy values from gpu to host for each Layer
 void Network::cl_to_host_values(){
     input->cl_to_host_values();
     for (Layer* layer : layers)
         layer->cl_to_host_values();
 }
 
+// Copy normalisation values from gpu to host for each Layer
 void Network::cl_to_host_norm(){
     for (Layer* layer : layers)
-        if (layer->get_norm() != none)
+        if (layer->get_norm())
             layer->cl_to_host_norm();
 }
 
+// Copy all values from gpu to host for each Layer
 void Network::cl_to_host(){
     cl_to_host_values();
     cl_to_host_weights();
@@ -199,9 +212,11 @@ void Network::set_input(float* data, int dsize){
     clEnqueueWriteBuffer(
         cl.command_queue, input->get_values_clmem(), CL_TRUE, 0, 
         dsize * sizeof(float), data, 0, NULL, NULL);
+
     clFinish(cl.command_queue);
 }
 
+// Complete forward pass on gpu
 void Network::calc_cl(float* data, int dsize){
     set_input(data, dsize);
 
@@ -209,6 +224,8 @@ void Network::calc_cl(float* data, int dsize){
         layer->update();
 }
 
+// Init gpu buffers for each Layer, calculate forward pass and read
+// result from gpu
 float* Network::calc(float* data, int dsize){
 
     if (dsize != ninput){
@@ -234,6 +251,8 @@ float* Network::calc(float* data, int dsize){
     return get_output();
 }
 
+// Calculate loss and loss gradient for the output Layer. Return loss as
+// a metric to monitor during training
 float Network::calc_loss(int bsize){
     Layer* out_layer   = get_output_layer();
     size_t global_size = bsize * out_layer->get_nunits();
@@ -273,7 +292,7 @@ float Network::calc_loss(int bsize){
             // Args
             expected_clmem,
             out_layer->get_values_clmem(),
-            out_layer->get_values_grad_clmem());
+            out_layer->get_input_grad_clmem());
 
         break;
     
@@ -299,6 +318,8 @@ float Network::calc_loss(int bsize){
     return l / (float)bsize;
 }
 
+// Calculate the output Layer's input value gradient by multiplying the 
+// loss gradient by the activation gradient and norm gradient if used
 void Network::calc_output_value_grad(int bsize){
     // Cross entropy derivative is combined with softmax in the loss
     // calculation and stored in out_values_grad already.
@@ -318,16 +339,19 @@ void Network::calc_output_value_grad(int bsize){
         // Args
         loss_grad_clmem,
         out_layer->get_act_grad_clmem(),
-        out_layer->get_values_grad_clmem());
+        out_layer->get_input_grad_clmem());
 
     // If using norm, previous step calculated dL/dAf because it hasn't
     // accounted for the affine and normalisation gradients
-    if (out_layer->get_norm() != none)
+    if (out_layer->get_norm())
         out_layer->calc_norm_grad();
 
     clFinish(cl.command_queue);
 }
 
+// Complete a single forward and backwards pass on a batch of data. 
+// Calculating loss, gradients and updating weights. Return loss as a
+// metric to monitor during training
 float Network::fit_batch_cl(
     float* data, int dsize, float* exp, int esize, int bsize, int instance){
 
@@ -354,15 +378,16 @@ float Network::fit_batch_cl(
         prev->calc_act_grad();
         // Calculate prev Layer's loss_grad dL/dA by multiplying 
         // dL/dy and dy/dA(w)
-        layer->calc_loss_grad();
+        layer->calc_prev_output_grad();
         // Calculate prev Layer's value_grad by multiplying 
         // dL/dA(act_grad) and dA/dz(loss_grad)
-        prev->calc_value_grad();
+        prev->calc_input_grad();
         // If using norm, previous step computes dL/Af
-        if (prev->get_norm() != none)
+        if (prev->get_norm())
             prev->calc_norm_grad();
     }
 
+    // Update learnable parameters
     for (Layer* layer : layers)
         layer->optimise(opt, learn_rate, instance);
 
@@ -391,12 +416,16 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
     for (Layer* layer : layers)
         layer->init_cl_mem(opt, bsize);
     
+    // Set printing floats to 2 decimal places
     std::cout << std::fixed << std::setprecision(2);
     
+    // Set width of space for printing batch progress to number of 
+    // digits in batches
     int l = floor(log10((float)batches));
     std::cout << std::setw(l);
-    for (int e = 0; e < epochs; e++){
 
+    for (int e = 0; e < epochs; e++){
+        // Time stamp for start of epoch
         auto t_estart = std::chrono::high_resolution_clock::now();
         
         // If adam optimsier, clear moving averages 
@@ -406,7 +435,7 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
         }
 
         for (int b = 0; b < batches; b++){
-    
+            // Calculate loss and update weights
             float l = fit_batch_cl(&data[dsize * bsize * b], dsize,
                       &exp[esize * bsize * b], esize, bsize, b);
 
@@ -426,9 +455,9 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
                 std::cout << ' ';
 
             std::cout << ']';
-
             std::cout << " loss: " << l;
             
+            // Time stamp for end of batch
             auto t_now = std::chrono::high_resolution_clock::now();
 
             // Time 
@@ -439,11 +468,13 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
             std::cout << std::chrono::duration<double>(t_now - t_estart).count();
             std::cout << "s";
 
+            // Force console to print
             fflush(NULL);
         }
         std::cout << std::endl;
     }
 
+    // Read back values from gpu
     cl_to_host();
 
     // OpenCL free mem
@@ -453,10 +484,13 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
         layer->free_cl_mem();
 }
 
+// Evaluate network on test data and expected results and print accuracy
 void Network::evaluate(float* test, int tsize, float* exp, int esize,
                        int count){
 
+    // Track number of correct classifications
     int classify_correct = 0;
+    // TODO: implement regression evaluation
 
     std::cout << std::fixed << std::setprecision(2);
     // TODO: optimise this if necersarry
@@ -500,6 +534,7 @@ void Network::evaluate(float* test, int tsize, float* exp, int esize,
     std::cout << std::endl;
 }
 
+// Return a string representation of the network
 std::string Network::to_string(){
     std::string s;
     
@@ -509,6 +544,7 @@ std::string Network::to_string(){
     return s;
 }
 
+// Return values currently stored in the network. Used for debugging.
 // Don't trace before a calc, the value memory might be filled with
 // huge numbers potentially causing buffer overflow 
 std::string Network::trace(){

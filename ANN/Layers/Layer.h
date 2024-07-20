@@ -15,11 +15,13 @@ protected:
     int nunits      = 0;
     int prev_nunits = 0;
     int nweights    = 0;
+    int features    = 0;
 
     Layer* prev;
 
     Function act;
-    Function norm;
+    
+    bool norm;
 
     CLdata* cl;
 
@@ -35,8 +37,8 @@ protected:
     cl_mem bias_clmem;
     cl_mem pre_act_values_clmem;
 
-    cl_mem values_grad_clmem;
-    cl_mem loss_grad_clmem;     // weights * dL/dz
+    cl_mem input_grad_clmem;    // Input gradient, pre activation
+    cl_mem output_grad_clmem;   // Output gradient, post activation
     cl_mem weights_grad_clmem;  
     cl_mem act_grad_clmem;      // Activation/value differntial
     cl_mem bias_grad_clmem;
@@ -67,25 +69,23 @@ protected:
     cl_mem adam_gamma_square_clmem;
 
 public:
-    Layer(int nunits, Function act, Function norm, bool bias);
+    Layer(int nunits, Function act, bool norm, bool bias);
     ~Layer();
 
-    int      get_nunits()   { return nunits; }
-    float*   get_values()   { return values; }
-    float*   get_weights()  { return weights; }
-    Function get_norm()     { return norm; }
+    int    get_nunits()   { return nunits; }
+    float* get_values()   { return values; }
+    float* get_weights()  { return weights; }
+    bool   get_norm()     { return norm; }
 
     void set_cl(CLdata* cl) { this->cl = cl; }
 
     cl_mem get_values_clmem()  { return values_clmem; }
     cl_mem get_weights_clmem() { return weights_clmem; }
 
-    cl_mem get_values_grad_clmem()    { return values_grad_clmem; }
+    cl_mem get_input_grad_clmem()     { return input_grad_clmem; }
     cl_mem get_pre_act_values_clmem() { return pre_act_values_clmem; }
-    cl_mem get_loss_grad_clmem()      { return loss_grad_clmem; }
+    cl_mem get_output_grad_clmem()    { return output_grad_clmem; }
     cl_mem get_act_grad_clmem()       { return act_grad_clmem; }
-
-    int get_features();
 
     void cl_to_host_values();
     void cl_to_host_weights();
@@ -97,10 +97,14 @@ public:
 
     void init_norm_cl_mem(Function opt);
 
+    // Adam averages are calculated iteratively, so they need to be zeroed
+    // each epoch
     void zero_adam_avgs();
     void zero_adam_norm();
 
-    void init_weights();
+    // Init weights with random values using Xavier and Glorot 
+    // initialisation
+    void init_weights(int nweights);
 
     // Calc new values by feed forward
     void update();
@@ -113,20 +117,21 @@ public:
     // Apply activation funtion pre act values
     void apply_act();
     // Connect Layer to prev during Network compilation
-    virtual void connect(Layer* prev) {};
+    virtual void connect(Layer* prev);
+    // Optimse parameters using opt optimser
     void optimise(Function opt, float learn_rate, int instance);
     // Accumulate weight grads dL/dw by multilpying dL/dy and dy/dw(z)
     // and bias dL/db as dL/dy * dy/db(1)
     virtual void calc_weight_grad(Function reg, float lambda) {};
-    // Calculate prev Layer's loss_grad dL/dA by multiplying dL/dy and dy/dA(w^T)
-    virtual void calc_loss_grad() {};
+    // Calculate prev Layer's gradient at output dL/dA by multiplying 
+    // dL/dy and dy/dA(w^T)
+    virtual void calc_prev_output_grad() {};
     // Calculate value_grad by multiplying dL/dA and dA/dz
-    virtual void calc_value_grad() {};
+    virtual void calc_input_grad() {};
     // Calculate the activation function gradient at the pre_act_values
     void calc_act_grad();
-    // Combine normalisation gradient with act_grad_clmem and calc
-    
+    // Combine normalisation gradient with act_grad_clmem 
     virtual void calc_norm_grad() {};
     
-    virtual std::string to_string(){ return ""; };
+    virtual std::string to_string() { return ""; };
 };

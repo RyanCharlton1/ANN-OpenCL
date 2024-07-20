@@ -27,7 +27,7 @@ public:
     Conv(int prevw,   int prevh,   int prevc,
          int filterw,   int filterh,   int features,
          int stridex, int stridey,
-         Function act, Function norm=none, bool bias=true)
+         Function act, bool norm=false, bool bias=true)
     : Dense(nunits(prevw, prevh, filterw, filterh, stridex, stridey, features),
             act, norm, bias){
         
@@ -39,6 +39,8 @@ public:
 
         outx = masks(prevw, filterw, stridex);
         outy = masks(prevh, filterh, stridey);
+
+        features = 1;
     }
 
     int    padded_values_grad_size;
@@ -58,7 +60,7 @@ public:
     void calc_weight_grad(Function reg, float lambda) override;
     // Applying reversed weights to padded and dilated value gradients
     // will calculate previous Layer's loss grad
-    void calc_loss_grad() override;
+    void calc_prev_output_grad() override;
     // Print each masks weights, each mask squashed to a single row
     std::string to_string() override;
 };

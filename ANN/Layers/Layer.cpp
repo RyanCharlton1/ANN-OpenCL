@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-Layer::Layer(int nunits, Function act, Function norm, bool bias){
+Layer::Layer(int nunits, Function act, bool norm, bool bias){
     this->nunits   = nunits;
     this->act      = act;
     this->has_bias = bias;
@@ -11,19 +11,13 @@ Layer::Layer(int nunits, Function act, Function norm, bool bias){
     values = new float[nunits];
 
     // Bias shifts the distribution, but normalising centers at 0 
-    if (norm != none) has_bias   = false;
-    if (bias)         this->bias = new float[nunits];
-
-    if (norm != none){
-        size_t size = get_features();
-        beta_values  = new float[size];
-        gamma_values = new float[size];
-
-        std::fill(beta_values, beta_values + size, 0.0f);
-        std::fill(gamma_values, gamma_values + size, 1.0f);
-    }
+    // making it redundant
+    if (norm) has_bias   = false;
+    if (bias) this->bias = new float[nunits];
 }
 
+// Initialise OpenCL memory objects, weights_clmem and bias_clmem
+// copy vlaues from weights and bias arrays
 void Layer::init_cl_mem(Function opt, int bsize){
     this->bsize = bsize;
     values_clmem = alloc_buffer(
@@ -41,11 +35,11 @@ void Layer::init_cl_mem(Function opt, int bsize){
     pre_act_values_clmem = alloc_buffer(
         cl->context, "pre_act_values_clmem", bsize * nunits * sizeof(float));
 
-    values_grad_clmem = alloc_buffer(
-        cl->context, "values_grad_clmem", bsize * nunits * sizeof(float));
+    input_grad_clmem = alloc_buffer(
+        cl->context, "input_grad_clmem", bsize * nunits * sizeof(float));
 
-    loss_grad_clmem = alloc_buffer(
-        cl->context, "loss_grad_clmem", bsize * nunits * sizeof(float));
+    output_grad_clmem = alloc_buffer(
+        cl->context, "output_grad_clmem", bsize * nunits * sizeof(float));
 
     weights_grad_clmem = alloc_buffer(
         cl->context, "weights_grad_clmem", nweights * sizeof(float));
@@ -79,15 +73,17 @@ void Layer::init_cl_mem(Function opt, int bsize){
     }
     }
     
-    if (norm != none)
+    if (norm)
         init_norm_cl_mem(adam);
 }
 
+// Initialise OpenCL memory objects for normalisation, norm_beta_clmem and
+// norm_gamma_clmem, copy values from beta_values and gamma_values arrays
 void Layer::init_norm_cl_mem(Function opt){
     float zero = 0.0f;
     float one  = 1.0f;
 
-    size_t size = get_features() * sizeof(float);
+    size_t size = features * sizeof(float);
 
     cl_int status;
 
@@ -101,17 +97,9 @@ void Layer::init_norm_cl_mem(Function opt){
         cl->context, "norm_beta_clmem", size, beta_values, 
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
 
-    //status = clEnqueueFillBuffer(cl->command_queue, norm_beta_clmem,
-    //    &zero, sizeof(float), 0, nunits * sizeof(float), 0, NULL, NULL);
-    //cl_print_err("command_queue", status);
-
     norm_gamma_clmem = alloc_buffer(
         cl->context, "norm_gamma_clmem", size, gamma_values,
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
-
-    //status = clEnqueueFillBuffer(cl->command_queue, norm_gamma_clmem,
-    //    &one, sizeof(float), 0, nunits * sizeof(float), 0, NULL, NULL);
-    //cl_print_err("command_queue", status);
     
     pre_norm_values_clmem = alloc_buffer(
         cl->context, "pre_norm_values_clmem", bsize * nunits * sizeof(float));
@@ -141,14 +129,14 @@ void Layer::init_norm_cl_mem(Function opt){
     }
 }
 
-
+// Free OpenCL memory objects
 void Layer::free_cl_mem(){
     clReleaseMemObject(values_clmem);
     clReleaseMemObject(weights_clmem);
     clReleaseMemObject(pre_act_values_clmem);
 
-    clReleaseMemObject(values_grad_clmem);
-    clReleaseMemObject(loss_grad_clmem);
+    clReleaseMemObject(input_grad_clmem);
+    clReleaseMemObject(output_grad_clmem);
     clReleaseMemObject(weights_grad_clmem);
     clReleaseMemObject(act_grad_clmem);
     
@@ -170,7 +158,7 @@ void Layer::free_cl_mem(){
         }
     }
 
-    if (norm != none){
+    if (norm){
         clReleaseMemObject(norm_avg_clmem);
         clReleaseMemObject(norm_var_clmem);
         clReleaseMemObject(norm_beta_clmem);
@@ -181,6 +169,7 @@ void Layer::free_cl_mem(){
     }
 }
 
+// Free memory objects
 Layer::~Layer(){
     if (values)       delete[] values;
     if (weights)      delete[] weights;
@@ -189,34 +178,23 @@ Layer::~Layer(){
     if (gamma_values) delete[] gamma_values;
 }
 
+// Update the values using weights and previous Layer's values. Add bias,
+// normalise and apply activation function depending on Layer's properties.
 void Layer::update(){
+    // Calculate input values from previous Layer's output values
     calc_pre_act_values();
+
     if (has_bias)
         add_bias();
 
-    if (norm != none)
+    if (norm)
         normalise();
 
     // Apply activation function and store in values_clmem
     apply_act();
 }
 
-int Layer::get_features(){
-    size_t size;
-    switch (norm)
-    {
-    case norm2d:
-        size = 1;
-        break;
-
-    default:
-        size = nunits;
-        break;
-    }
-
-    return size;
-}
-
+// Retrieve values from gpu memory and store in values array
 void Layer::cl_to_host_values() {
     cl_int status = clEnqueueReadBuffer(
         cl->command_queue, values_clmem, CL_FALSE, 0, 
@@ -226,6 +204,7 @@ void Layer::cl_to_host_values() {
     clFinish(cl->command_queue);
 }
 
+// Retrieve weights from gpu memory and store in weights array
 void Layer::cl_to_host_weights() {
     cl_int status = clEnqueueReadBuffer(
         cl->command_queue, weights_clmem, CL_FALSE, 0, 
@@ -235,8 +214,10 @@ void Layer::cl_to_host_weights() {
     clFinish(cl->command_queue);
 }
 
+// Retrieve normalisation parameters from gpu memory and store in 
+// beta_values and gamma_values arrays
 void Layer::cl_to_host_norm(){
-    size_t size = get_features() * sizeof(float);
+    size_t size = features * sizeof(float);
 
     cl_int status = clEnqueueReadBuffer(
         cl->command_queue, norm_beta_clmem, CL_FALSE, 0, 
@@ -253,6 +234,8 @@ void Layer::cl_to_host_norm(){
     clFinish(cl->command_queue);
 }
 
+// Adam averages are calculate iteritvely, so they need to be zeroed 
+// before each epoch
 void Layer::zero_adam_avgs(){
     float zero = 0.0f;
 
@@ -280,14 +263,16 @@ void Layer::zero_adam_avgs(){
     cl_print_err("adam_bias_square_avg_clmem", status);
     }
 
-    if (norm != none)
+    if (norm)
         zero_adam_norm();
 }
 
+// Adam averages are calculate iteritvely, so they need to be zeroed 
+// before each epoch
 void Layer::zero_adam_norm(){
     float zero = 0.0f;
 
-    size_t size = get_features() * sizeof(float);
+    size_t size = features * sizeof(float);
 
     cl_int status;
     status = clEnqueueFillBuffer(
@@ -311,10 +296,17 @@ void Layer::zero_adam_norm(){
     cl_print_err("adam_gamma_square_clmem", status);
 }
 
-void Layer::init_weights(){
+// Initalise the weights with random values using Xavier or Glorot 
+// depending on the activation function. Init all gamma values to 1 and
+// all beta values to 0
+void Layer::init_weights(int nweights){
     float half_range;
     float range;
     
+    this->nweights = nweights;
+    
+    weights = new float[nweights];
+
     switch(act){
     case ReLU:
     case leaky_ReLU:
@@ -328,7 +320,6 @@ void Layer::init_weights(){
         break;
     }
 
-
     range = 2.0f * half_range;
 
     for (int i = 0; i < nweights; i++)
@@ -338,8 +329,17 @@ void Layer::init_weights(){
         for (int i = 0; i < nunits; i++)
             bias[i] = -half_range + (range * (float)rand() / (float)RAND_MAX);
 
+
+    if (norm){
+        beta_values  = new float[features];
+        gamma_values = new float[features];
+
+        std::fill(beta_values, beta_values + features, 0.0f);
+        std::fill(gamma_values, gamma_values + features, 1.0f);
+    }
 }
 
+// Add bias to each unit in the Layer
 void Layer::add_bias(){
     size_t work_size = bsize * nunits;
     
@@ -354,6 +354,7 @@ void Layer::add_bias(){
     clFinish(cl->command_queue);
 }
 
+// Apply activation function to pre act values to get final output values
 void Layer::apply_act(){
     size_t work_size = bsize * nunits; 
     size_t bsize_s   = bsize;
@@ -394,9 +395,16 @@ void Layer::apply_act(){
     clFinish(cl->command_queue);
 }
 
+// Link to previous Layer
+void Layer::connect(Layer* prev){
+    this->prev  = prev; 
+    prev_nunits = prev->get_nunits();
+}
+
+// Update learnable params using optimiser
 void Layer::optimise(Function optimiser, float learn_rate, int instance){
     size_t nweights_sizet = nweights;
-    size_t nbias_sizet    = get_features();
+    size_t nbias_sizet    = features;
 
     switch (optimiser){
     case GrdDsc:
@@ -415,7 +423,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
                 bias_clmem,
                 bias_grad_clmem);
         
-        if (norm != none){
+        if (norm){
             call_kernel(cl, GrdDsc,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
@@ -455,7 +463,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
                 instance);
         }
 
-        if (norm != none){
+        if (norm){
             call_kernel(cl, adam,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
@@ -481,6 +489,8 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
     clFinish(cl->command_queue);
 }
 
+// Calculate activation gradient by applying activation function's 
+// derivative to the pre act values  
 void Layer::calc_act_grad(){
     // Softmax der is combined into cross entropy der
     if (act == softmax)
