@@ -112,8 +112,9 @@ public:
     virtual void calc_pre_act_values() {};
     // Add bias to pre act values
     void add_bias();
-    // Use Layer::norm to normalise values pre activation
-    virtual void normalise() {};
+    // Normalise each feature before activation function. Each unit is a 
+    // faeture in a Dense Layer and each channel is a feature in a Conv Layer
+    void normalise();
     // Apply activation funtion pre act values
     void apply_act();
     // Connect Layer to prev during Network compilation
@@ -130,8 +131,10 @@ public:
     virtual void calc_input_grad() {};
     // Calculate the activation function gradient at the pre_act_values
     void calc_act_grad();
-    // Combine normalisation gradient with act_grad_clmem 
-    virtual void calc_norm_grad() {};
+    // Calculate normalisation grad and combine in act_grad_clmem 
+    // by multiplying dA/dAf * dAf/dN * dN/dz. Also calculate norm param
+    // grads
+    void calc_norm_grad();
     
     virtual std::string to_string() { return ""; };
 };

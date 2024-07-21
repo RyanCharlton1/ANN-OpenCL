@@ -268,14 +268,14 @@ void softmax(int    nunits,
 
 // Set local work groups for each batch 
 __kernel 
-void cross_entropy(int nunits,
-          __global float* y,
-          __global float* y_,
-          __global float* x){
+void cross_entropy(
+__global float* y,
+__global float* y_,
+__global float* x){
 
     int i = get_global_id(0);
 
-    x[i] = -y[i] * log(y_[i]) / nunits;
+    x[i] = -y[i] * log(y_[i]);
 }
 
 // Softmax der, combining the cross entropy and softmax der makes 
@@ -625,13 +625,6 @@ __global float* result){
 
     int fitler_size  = filterh * filterw * channels;
 
-    int result_index;
-    result_index  = batch * prevh * prevx;
-    result_index += prevy * prevw;
-    result_index += prevx;
-    result_index *= channels;
-    result_index += channel;
-
     // First position of filter to use as filter is read backwards
     // for each channel
     int filter_index = fitler_size - channels + channel;
@@ -640,7 +633,7 @@ __global float* result){
     int image_start = batch * paddedh * paddedw * features;
     // Start of filter
     int filter_start = image_start + prevy * paddedw + prevx;
-
+    
     float acc = 0.0f;
     for (int y = 0; y < filterh; y++){
         int filtery = filter_start + y * paddedw;
@@ -653,12 +646,18 @@ __global float* result){
                 int feature_index = filter_index + f * fitler_size;
 
                 acc += value_grads[filterf + f] * filters[feature_index];
-                //printf("deconv[%d]: [%d](% .2f) * [%d](% .2f)\n", result_index, filterf + f, value_grads[filterf + f], feature_index, filters[feature_index]);
             }
 
             filter_index -= channels;
         }
     }
+
+    int result_index;
+    result_index  = batch * prevh * prevx;
+    result_index += prevy * prevw;
+    result_index += prevx;
+    result_index *= channels;
+    result_index += channel;
 
     result[result_index] = acc;
 
@@ -698,16 +697,6 @@ __global float* weight_grad){
     int feature = channel / channels;
     channel %= channels;
 
-    // printf("channels: %d features: %d\n", channels, features);
-    // printf("weighty: %d weightx: %d channel:%d feature:%d\n", weighty, weightx, channel, feature);
-
-    int weight_index;
-    weight_index  = feature * filterh * filterw;
-    weight_index += weighty * filterw;
-    weight_index += weightx;
-    weight_index *= channels;
-    weight_index += channel;
-
     int values_start = weighty * prevw + weightx;
 
     float acc = 0.0f;
@@ -720,19 +709,24 @@ __global float* weight_grad){
             int valuesc = valuesx * channels + channel;    
             int gradsx  = gradsy + x;
             int gradsc  = gradsx * features + feature;
-            //printf("y: %d x: %d c: %d\n", gradsy, gradsx, gradsc);
-
+            
             for (int b = 0; b < bsize; b++){
                 int valuesb = valuesc + b * prev_size;
                 int gradsb  = gradsc + b * padded_size;
 
                 acc += values[valuesb] * padded_grads[gradsb];
-                //printf("conv_grad[%d] += [%d](% .2f) * [%d](% .2f)\n", weight_index, valuesb, values[valuesb], gradsb, padded_grads[gradsb]);
             }
         }
     }
 
     acc /= (float)bsize;
+
+    int weight_index;
+    weight_index  = feature * filterh * filterw;
+    weight_index += weighty * filterw;
+    weight_index += weightx;
+    weight_index *= channels;
+    weight_index += channel;
 
     weight_grad[weight_index] = acc;
 

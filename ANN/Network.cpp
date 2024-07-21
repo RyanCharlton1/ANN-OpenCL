@@ -255,21 +255,21 @@ float* Network::calc(float* data, int dsize){
 // a metric to monitor during training
 float Network::calc_loss(int bsize){
     Layer* out_layer   = get_output_layer();
-    size_t global_size = bsize * out_layer->get_nunits();
-    int    out_nunits  = out_layer->get_nunits();
+    int global_size[1] = { bsize * out_layer->get_nunits() } ;
+    int out_nunits[1]  = { out_layer->get_nunits() } ;
 
     switch (loss)
     {
     case MSE:
         call_kernel(&cl, MSE, 
-            1, NULL, &global_size, NULL, 0, NULL, NULL,
+            1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             expected_clmem,
             out_layer->get_values_clmem(),
             loss_clmem);
 
         call_kernel(&cl, MSE_der,
-            1, NULL, &global_size, NULL, 0, NULL, NULL,
+            1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             out_nunits,
             expected_clmem,
@@ -280,15 +280,14 @@ float Network::calc_loss(int bsize){
 
     case cross_entropy:
         call_kernel(&cl, cross_entropy,
-            1, NULL, &global_size, NULL, 0, NULL, NULL,
+            1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
-            out_nunits,
             expected_clmem,
             out_layer->get_values_clmem(),
             loss_clmem);
 
         call_kernel(&cl, cross_entropy_der,
-            1, NULL, &global_size, NULL, 0, NULL, NULL,
+            1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             expected_clmem,
             out_layer->get_values_clmem(),
@@ -303,14 +302,14 @@ float Network::calc_loss(int bsize){
 
     clFinish(cl.command_queue);
     
-    float* loss_arr = new float[global_size];
+    float* loss_arr = new float[global_size[0]];
     cl_int status = clEnqueueReadBuffer(
-        cl.command_queue, loss_clmem, CL_TRUE, 0, global_size * sizeof(float),
+        cl.command_queue, loss_clmem, CL_TRUE, 0, global_size[0] * sizeof(float),
         loss_arr, 0, NULL, NULL);
     cl_print_err("Read loss buffer", status);
 
     float l = 0.0f;
-    for (int i = 0; i < global_size; i++)
+    for (int i = 0; i < global_size[0]; i++)
         l += loss_arr[i];
 
     delete[] loss_arr;
@@ -332,10 +331,11 @@ void Network::calc_output_value_grad(int bsize){
     out_layer->calc_act_grad();
 
     // Multiply activation grad by loss grad to get dL/dz
-    size_t out_nunits = out_layer->get_nunits();
-    size_t work_size  = bsize * out_nunits;
+    int out_nunits[1] = { out_layer->get_nunits() };
+    int work_size[1]  = { bsize * out_nunits[0] };
+
     call_kernel(&cl, vec_vec_mult,
-        1, NULL, &work_size, NULL, 0, NULL, NULL,
+        1, NULL, work_size, NULL, 0, NULL, NULL,
         // Args
         loss_grad_clmem,
         out_layer->get_act_grad_clmem(),

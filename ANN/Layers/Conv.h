@@ -40,7 +40,7 @@ public:
         outx = masks(prevw, filterw, stridex);
         outy = masks(prevh, filterh, stridey);
 
-        features = 1;
+        this->features = features;
     }
 
     int    padded_values_grad_size;

@@ -101,7 +101,7 @@ void CLdata::free(){
 
 // Allocate a cl_mem object and handle errors
 cl_mem alloc_buffer(cl_context context, const char* name, 
-    size_t size, void* data, cl_mem_flags flag){
+    int size, void* data, cl_mem_flags flag){
 
     if (size < 1){
         //std::cout << name << " invalid size" << std::endl;
@@ -222,7 +222,7 @@ const char* function_arg_string(Function f){
     case MSE_der:
         return "iccc";
     case cross_entropy:
-        return "iccc";
+        return "ccc";
     case cross_entropy_der:
         return "ccc";
     case GrdDsc:
@@ -257,8 +257,8 @@ const char* function_arg_string(Function f){
 
 // Enqueue kernel jobs with variadic arguments
 void call_kernel(CLdata* cl, Function fun, cl_uint work_dim, 
-    const size_t* global_work_offset, const size_t* global_work_size,
-    const size_t* local_work_size, cl_uint num_events_in_wait_list, 
+    const int* global_work_offset, const int* global_work_size,
+    const int* local_work_size, cl_uint num_events_in_wait_list, 
     const cl_event* event_wait_list, cl_event* event...){
 
     va_list     args;
@@ -312,13 +312,37 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
         i++;
     }
 
+    // Cast int to size_t as size_t is a larger type than int
+    size_t *global_work_size_ = new size_t[work_dim];
+
+    size_t *global_offset_size_   = 
+        global_work_offset ? new size_t[work_dim] : NULL;
+    size_t *local_work_size_    = 
+        local_work_size ? new size_t[work_dim] : NULL;
+
+    for (int i = 0; i < work_dim; i++){
+        global_work_size_[i] = global_work_size[i];
+
+        if (global_offset_size_)
+            global_offset_size_[i] = global_work_offset[i];
+
+        if (local_work_size_)
+            local_work_size_[i] = local_work_size[i];
+    }
+
     // Queue kernel jobs
     status = clEnqueueNDRangeKernel(
-        cl->command_queue, kernel, work_dim, global_work_offset, 
-        global_work_size, local_work_size, num_events_in_wait_list, 
+        cl->command_queue, kernel, work_dim, global_offset_size_, 
+        global_work_size_, local_work_size_, num_events_in_wait_list, 
         event_wait_list, event);
     
     cl_print_err((error + "enqueue").c_str(), status);
+
+    delete global_work_size_;
+    if (global_offset_size_)
+        delete global_offset_size_;
+    if (local_work_size)
+        delete local_work_size_;
 
     va_end(args);
 }

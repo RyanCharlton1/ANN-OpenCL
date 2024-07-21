@@ -54,7 +54,7 @@ void Conv::connect(Layer* prev){
 void Conv::calc_pre_act_values(){
     // outx and outy are the amount of masks that can be applied to the
     // input image forming the output image's dimensions
-    size_t work_size[3] = { bsize * outy, outx, features };
+    int work_size[3] = { bsize * outy, outx, features };
 
     call_kernel(
         cl, convolution,
@@ -79,8 +79,8 @@ void Conv::calc_pre_act_values(){
 // dilated output gradients
 // https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
 void Conv::calc_prev_output_grad(){
-    size_t pad_work_size[3]    = { bsize * outy, outx, features };
-    size_t deconv_work_size[3] = { bsize * prevh, prevw, prevc};
+    int pad_work_size[3]    = { bsize * outy, outx, features };
+    int deconv_work_size[3] = { bsize * prevh, prevw, prevc};
     cl_event padded;
 
     call_kernel(
@@ -116,8 +116,8 @@ void Conv::calc_prev_output_grad(){
 // padded and dilated output gradients
 // https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
 void Conv::calc_weight_grad(Function reg, float lambda){
-    size_t pad_work_size[3]  = { bsize * outy, outx, features };
-    size_t grad_work_size[3] = { filterh, filterw, prevc * features };
+    int pad_work_size[3]  = { bsize * outy, outx, features };
+    int grad_work_size[3] = { filterh, filterw, prevc * features };
     cl_event padded;
 
     call_kernel(

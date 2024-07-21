@@ -83,7 +83,7 @@ void Layer::init_norm_cl_mem(Function opt){
     float zero = 0.0f;
     float one  = 1.0f;
 
-    size_t size = features * sizeof(float);
+    int size = features * sizeof(float);
 
     cl_int status;
 
@@ -217,7 +217,7 @@ void Layer::cl_to_host_weights() {
 // Retrieve normalisation parameters from gpu memory and store in 
 // beta_values and gamma_values arrays
 void Layer::cl_to_host_norm(){
-    size_t size = features * sizeof(float);
+    int size = features * sizeof(float);
 
     cl_int status = clEnqueueReadBuffer(
         cl->command_queue, norm_beta_clmem, CL_FALSE, 0, 
@@ -272,7 +272,7 @@ void Layer::zero_adam_avgs(){
 void Layer::zero_adam_norm(){
     float zero = 0.0f;
 
-    size_t size = features * sizeof(float);
+    int size = features * sizeof(float);
 
     cl_int status;
     status = clEnqueueFillBuffer(
@@ -341,7 +341,7 @@ void Layer::init_weights(int nweights){
 
 // Add bias to each unit in the Layer
 void Layer::add_bias(){
-    size_t work_size = bsize * nunits;
+    int work_size = bsize * nunits;
     
     call_kernel(
         cl, vec_vec_add_inplace,
@@ -354,10 +354,80 @@ void Layer::add_bias(){
     clFinish(cl->command_queue);
 }
 
+// normalise each feature before activation function by calculating the
+// average and variance and scaling the values to be within [-1, 1] and 
+// then applying an affine transformation to scale and shift the values.
+void Layer::normalise(){
+    int work_size[1]     = { bsize * nunits };
+    int features_size[1] = { features };
+
+    float zero = 0.0f;
+
+    cl_int status;
+    // Hold pre norm values for computing norm gradient
+    clEnqueueCopyBuffer(cl->command_queue, 
+        pre_act_values_clmem, pre_norm_values_clmem, 0, 0, 
+        bsize * nunits * sizeof(float), 0, NULL, NULL);
+
+    // // Set initial average and variance calcs to zero
+    // status = clEnqueueFillBuffer(cl->command_queue, norm_avg_clmem,
+    //     &zero, sizeof(float), 0, features * sizeof(float), 0, NULL, NULL);
+    // cl_print_err("norm_avg_clmem", status);
+
+    // status = clEnqueueFillBuffer(cl->command_queue, norm_var_clmem,
+    //     &zero, sizeof(float), 0, features * sizeof(float), 0, NULL, NULL);
+    // cl_print_err("norm_var_clmem", status);
+
+    clFinish(cl->command_queue);
+
+    cl_event avg_complete, var_complete, norm_complete;
+
+    // Calculate each feature's average across batches
+    call_kernel(cl, avg, 
+        1, NULL, features_size, NULL, 0, NULL, &avg_complete,
+        // Args
+        bsize,
+        pre_act_values_clmem,
+        norm_avg_clmem);
+    
+    // Calculate each feature's variance across batches
+    call_kernel(cl, var,
+        1, NULL, features_size, NULL, 1, &avg_complete, &var_complete,
+        // Args
+        bsize,
+        norm_avg_clmem,
+        pre_act_values_clmem,
+        norm_var_clmem);
+    
+    // Normalise the values using each features variance and average
+    call_kernel(cl, norm1d,
+        1, NULL, work_size, features_size, 1, &var_complete, &norm_complete,
+        // Args
+        pre_act_values_clmem,
+        norm_avg_clmem,
+        norm_var_clmem);
+    
+    // Hold pre affine values for affine parameter derivative calc
+    clEnqueueCopyBuffer(cl->command_queue, 
+        pre_act_values_clmem, pre_affine_values_clmem, 0, 0, 
+        bsize * nunits * sizeof(float), 1, &norm_complete, NULL);
+
+    // Apply affine transformation to normalised values
+    call_kernel(cl, affine, 
+        1, NULL, work_size, features_size, 1, &norm_complete, NULL,
+        // Args
+        pre_act_values_clmem,
+        norm_gamma_clmem,
+        norm_beta_clmem);
+
+    clFinish(cl->command_queue);
+}
+
+
 // Apply activation function to pre act values to get final output values
 void Layer::apply_act(){
-    size_t work_size = bsize * nunits; 
-    size_t bsize_s   = bsize;
+    int work_size = bsize * nunits; 
+    int bsize_s   = bsize;
 
     cl_event sum_done;
 
@@ -403,8 +473,8 @@ void Layer::connect(Layer* prev){
 
 // Update learnable params using optimiser
 void Layer::optimise(Function optimiser, float learn_rate, int instance){
-    size_t nweights_sizet = nweights;
-    size_t nbias_sizet    = features;
+    int nweights_sizet = nweights;
+    int nbias_sizet    = features;
 
     switch (optimiser){
     case GrdDsc:
@@ -489,6 +559,42 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
     clFinish(cl->command_queue);
 }
 
+// Calculate the affine transformation gradients and gradients for the 
+// pre normalisation values.
+void Layer::calc_norm_grad(){
+    int work_size[1]     = { bsize * nunits };
+    int features_size[1] = { features };
+
+    // Gamma gradient dAf/dg = N => dL/dg = dL/dAf * dAf/dg
+    call_kernel(cl, gamma_grad,
+        1, NULL, features_size, NULL, 0, NULL, NULL,
+        // Args
+        bsize,
+        pre_affine_values_clmem,
+        input_grad_clmem,
+        norm_gamma_grad_clmem);
+
+    // Beta gradient dA/db = 1 => dL/db = dL/dAf * dAf/db
+    call_kernel(cl, bias_grad,
+        1, NULL, features_size, NULL, 0, NULL, NULL,
+        // Args
+        bsize,
+        input_grad_clmem,
+        norm_beta_grad_clmem);
+
+    // Derivation for normalisation derivative is in README
+    call_kernel(cl, norm1d_der,
+        1, NULL, work_size, features_size, 0, NULL, NULL,
+        // Args
+        pre_norm_values_clmem,
+        norm_avg_clmem,
+        norm_var_clmem,
+        norm_gamma_clmem,
+        input_grad_clmem);
+
+    clFinish(cl->command_queue);
+}
+
 // Calculate activation gradient by applying activation function's 
 // derivative to the pre act values  
 void Layer::calc_act_grad(){
@@ -496,7 +602,7 @@ void Layer::calc_act_grad(){
     if (act == softmax)
         return;
 
-    size_t work_size = bsize * nunits; 
+    int work_size = bsize * nunits; 
 
     call_kernel(
         cl, derivative(act),
