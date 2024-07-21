@@ -6,11 +6,12 @@
 // Find row vector dot product each pass. Vec can be larger than matrix
 // for batches, needs to be set in local workgroup size.
 __kernel 
-void mat_vec_mult(int    cols,
-                  int    rows,
-         __global float* mat,
-         __global float* vec_in,
-         __global float* vec_out){
+void mat_vec_mult(
+         int    cols,
+         int    rows,
+__global float* mat,
+__global float* vec_in,
+__global float* vec_out){
     
     int g = get_global_id(0);
 
@@ -32,9 +33,10 @@ void mat_vec_mult(int    cols,
 
 // Multiply vec_a and vec_b, store in vec_c
 __kernel 
-void vec_vec_mult(__global float* vec_a,
-                  __global float* vec_b,
-                  __global float* vec_c){
+void vec_vec_mult(
+__global float* vec_a,
+__global float* vec_b,
+__global float* vec_c){
 
     int i = get_global_id(0);
 
@@ -48,9 +50,10 @@ void vec_vec_mult(__global float* vec_a,
 // Add two vectors and store in the first, second may be larger than first,
 // it will repeat if second length is set as local work size.
 __kernel
-void vec_vec_add_inplace(int    bias_len,
-                __global float* values,
-                __global float* bias){
+void vec_vec_add_inplace(
+         int    bias_len,
+__global float* values,
+__global float* bias){
 
     int g = get_global_id(0);
 
@@ -59,8 +62,9 @@ void vec_vec_add_inplace(int    bias_len,
 }
 
 __kernel
-void vec_scalar_div(__global float* vec,
-                             float  n){
+void vec_scalar_div(
+__global float* vec,
+         float  n){
 
     int i = get_global_id(0);
 
@@ -72,12 +76,13 @@ void vec_scalar_div(__global float* vec,
 // To avoid conccurrency problems for batches, each job calculates an
 // element of the weight grad matrix 
 __kernel 
-void weight_grad(int    bsize,
-                 int    rows,
-                 int    cols,
-        __global float* loss,
-        __global float* prev_values,
-        __global float* weight_grad){
+void weight_grad(
+         int    bsize,
+         int    rows,
+         int    cols,
+__global float* loss,
+__global float* prev_values,
+__global float* weight_grad){
 
     int g   = get_global_id(0);
     int col = g % cols;
@@ -101,9 +106,10 @@ void weight_grad(int    bsize,
 
 // Calculate each element of bias in one job, same as weight_grad
 __kernel 
-void bias_grad(int    bsize,
-      __global float* values_grad,
-      __global float* bias_grad){
+void bias_grad(
+         int    bsize,
+__global float* values_grad,
+__global float* bias_grad){
 
     int i         = get_global_id(0);
     int nfeatures = get_global_size(0) / bsize;
@@ -129,11 +135,12 @@ void bias_grad(int    bsize,
 // Because we're calculating backwards for loss grad, going from y to z:
 // Transpose, read collumns instead of rows.
 __kernel 
-void mat_vec_mult_trans(int    rows,
-                        int    cols,
-               __global float* mat,
-               __global float* vec_in,
-               __global float* vec_out){
+void mat_vec_mult_trans(
+         int    rows,
+         int    cols,
+__global float* mat,
+__global float* vec_in,
+__global float* vec_out){
     
     int g = get_global_id(0);
 
@@ -155,8 +162,9 @@ void mat_vec_mult_trans(int    rows,
 
 // ReLU activation 
 __kernel
-void ReLU(__global float* pre_act_values,
-          __global float* values){
+void ReLU(
+__global float* pre_act_values,
+__global float* values){
 
     int g = get_global_id(0);
 
@@ -165,8 +173,9 @@ void ReLU(__global float* pre_act_values,
 
 // Leaky ReLU activation
 __kernel
-void leaky_ReLU(__global float* pre_act_values,
-                __global float* values){
+void leaky_ReLU(
+__global float* pre_act_values,
+__global float* values){
 
     int g = get_global_id(0);
 
@@ -175,8 +184,9 @@ void leaky_ReLU(__global float* pre_act_values,
 
 // ReLU activation der
 __kernel
-void ReLU_der(__global float* pre_act_values,
-              __global float* values_grad){
+void ReLU_der(
+__global float* pre_act_values,
+__global float* values_grad){
 
     int g = get_global_id(0);
 
@@ -185,8 +195,9 @@ void ReLU_der(__global float* pre_act_values,
 
 // Leaky ReLU activation der
 __kernel
-void leaky_ReLU_der(__global float* pre_act_values,
-                    __global float* values_grad){
+void leaky_ReLU_der(
+__global float* pre_act_values,
+__global float* values_grad){
 
     int g = get_global_id(0);
 
@@ -195,9 +206,10 @@ void leaky_ReLU_der(__global float* pre_act_values,
 
 // MSE loss, can do multiple batches
 __kernel 
-void MSE(__global float* y,
-         __global float* y_,
-         __global float* x){
+void MSE(
+__global float* y,
+__global float* y_,
+__global float* x){
 
     int i = get_global_id(0);
     int n = get_global_size(0);
@@ -213,10 +225,11 @@ void MSE(__global float* y,
 
 // MSE loss der, needs no adjustment for multiple batches
 __kernel 
-void MSE_der(int    size,
-    __global float* y,
-    __global float* y_,
-    __global float* der){
+void MSE_der(
+         int    size,
+__global float* y,
+__global float* y_,
+__global float* der){
 
     int i = get_global_id(0);
 
@@ -232,9 +245,10 @@ void MSE_der(int    size,
 // Softmax bottom sum, giving each batch one job is more efficient than
 // making a mutex for the sum
 __kernel
-void softmax_sum(int    zsize,
-        __global float* sums,
-        __global float* z){
+void softmax_sum(
+         int    zsize,
+__global float* sums,
+__global float* z){
 
     int g = get_global_id(0);
 
@@ -252,10 +266,11 @@ void softmax_sum(int    zsize,
 // Softmax, can do multiple batches, necerssary to set local work
 // groups, even for a single batch 
 __kernel
-void softmax(int    nunits,
-    __global float* sums,
-    __global float* z,
-    __global float* out){
+void softmax(
+         int    nunits,
+__global float* sums,
+__global float* z,
+__global float* out){
 
     int i = get_global_id(0);
 
@@ -282,9 +297,10 @@ __global float* x){
 // calculation very efficient, but the diff calculate is dL/dA not the
 // dL/dy like normal, so function must be called with value_grad as der
 __kernel
-void cross_entropy_der(__global float* y,
-                       __global float* y_,
-                       __global float* der){
+void cross_entropy_der(
+__global float* y,
+__global float* y_,
+__global float* der){
 
     int i = get_global_id(0);
 
@@ -296,9 +312,10 @@ void cross_entropy_der(__global float* y,
 }
 
 __kernel 
-void GrdDsc(float  learn_rate,
-   __global float* weights,
-   __global float* grads){
+void GrdDsc(
+         float  learn_rate,
+__global float* weights,
+__global float* grads){
 
     int i = get_global_id(0);
 
@@ -317,11 +334,12 @@ void GrdDsc(float  learn_rate,
 #define EPSILON 1e-6f
 
 __kernel
-void adam(float  learn_rate,
- __global float* weights,
- __global float* grads,
- __global float* avgs,
- __global float* square_avgs,
+void adam(
+         float  learn_rate,
+__global float* weights,
+__global float* grads,
+__global float* avgs,
+__global float* square_avgs,
           int    t){
 
     int i = get_global_id(0);
@@ -344,9 +362,10 @@ void adam(float  learn_rate,
 }
 
 __kernel
-void l2_reg(float  lambda,
-   __global float* grads,
-   __global float* weights){
+void l2_reg(
+         float  lambda,
+__global float* grads,
+__global float* weights){
 
     int i = get_global_id(0);
 
