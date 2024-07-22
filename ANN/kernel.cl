@@ -537,22 +537,6 @@ __global float* result){
     filter_start += filtery * stridey * prevw + filterx * stridex;
 
     int unit_index = (filtery * filtersx + filterx) * features + feature;
-    
-
-    float acc = 0.0f;
-    for (int y = 0; y < filterh; y++){
-        int filtery = filter_start + y * filterw;
-
-        for (int x = 0; x < filterw; x++){
-            int filterx = filtery + x;
-            int filterc = filterx * channels;
-
-            for (int c = 0; c < channels; c++){
-                acc += values[filterc + c] * filters[filters_index];
-                filters_index++;
-            }
-        }
-    }
 
     // Index of output node being calculated
     int result_index;
@@ -561,6 +545,22 @@ __global float* result){
     result_index += filterx;
     result_index *= features;
     result_index += feature;
+
+    float acc = 0.0f;
+    for (int y = 0; y < filterh; y++){
+        int filtery = filter_start + y * prevw;
+
+        for (int x = 0; x < filterw; x++){
+            int filterx = filtery + x;
+            int filterc = filterx * channels;
+
+            for (int c = 0; c < channels; c++){
+                acc += values[filterc + c] * filters[filters_index];
+                //printf("conv[%d] += %f * %f(%d * %d)\n", result_index, values[filterc + c], filters[filters_index], filterc + c, filters_index);
+                filters_index++;
+            }
+        }
+    }
 
     result[result_index] = acc;
 
