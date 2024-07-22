@@ -256,7 +256,7 @@ float* Network::calc(float* data, int dsize){
 float Network::calc_loss(int bsize){
     Layer* out_layer   = get_output_layer();
     int global_size[1] = { bsize * out_layer->get_nunits() } ;
-    int out_nunits[1]  = { out_layer->get_nunits() } ;
+    int out_nunits = out_layer->get_nunits();
 
     switch (loss)
     {

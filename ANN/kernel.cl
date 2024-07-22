@@ -472,7 +472,7 @@ __global float* act_grad){
     norm_der      /= pow(var[l] + EPSILON, 1.5f);
 
 #ifdef DEBUG
-    printf("norm1d[%d]: %f * %f * %f\nx: %f avg: %f var:%f\n", 
+    printf("norm1d_der[%d]: %f * %f * %f\nx: %f avg: %f var:%f\n", 
         i, act_grad[i], gamma[l], norm_der, pre_norm[i], avg[l], var[l]);
 #endif
 
