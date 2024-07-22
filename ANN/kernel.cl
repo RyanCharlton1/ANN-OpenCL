@@ -375,42 +375,48 @@ __global float* weights){
 // Calculate average for each feature
 __kernel
 void avg(
-         int    bsize,
+         int    elements,
 __global float* values,
 __global float* result){
 
-    int g         = get_global_id(0);
-    int nfeatures = get_global_size(0);
+    int feature  = get_global_id(0);
+    int features = get_global_size(0);
 
     float f = 0.0f;
-    for (int i = 0; i < bsize; i++)
-        f += values[i * nfeatures + g];
+    for (int i = feature; i < elements; i += features)
+        f += values[i];
 
-    f /= (float)bsize;
+    f /= (float)(elements / features);
 
-    result[g] = f;
+    result[feature] = f;
 
 #ifdef DEBUG
-    printf("avg[%d]: %f\n", g, f);
+    printf("avg[%d]: %f\n", feature, f);
 #endif
 }
 
 // Calculate variance: sum (x - avg)^2 / n of each feature
 __kernel
 void var(
-         int    bsize,
+         int    elements,
 __global float* avg,
 __global float* values,
 __global float* result){
 
-    int g         = get_global_id(0);
-    int nfeatures = get_global_size(0);
+    int feature  = get_global_id(0);
+    int features = get_global_size(0);
 
     float f = 0.0f;
-    for (int i = 0; i < bsize; i++)
-        f += pow(values[i * nfeatures + g] - avg[g], 2) / (float)bsize;
+    for (int i = feature; i < elements; i += features)
+        f += pow(values[i] - avg[feature], 2);
 
-    result[g] = f;
+    f /= (float)(elements / features);
+
+    result[feature] = f;
+
+#ifdef DEBUG
+    printf("var[%d]: %f\n", feature, f);
+#endif
 }
 
 // Apply affine transform: y = gamma x + beta

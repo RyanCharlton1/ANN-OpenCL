@@ -386,7 +386,7 @@ void Layer::normalise(){
     call_kernel(cl, avg, 
         1, NULL, features_size, NULL, 0, NULL, &avg_complete,
         // Args
-        bsize,
+        bsize * nunits,
         pre_act_values_clmem,
         norm_avg_clmem);
     
@@ -394,7 +394,7 @@ void Layer::normalise(){
     call_kernel(cl, var,
         1, NULL, features_size, NULL, 1, &avg_complete, &var_complete,
         // Args
-        bsize,
+        bsize * nunits,
         norm_avg_clmem,
         pre_act_values_clmem,
         norm_var_clmem);
