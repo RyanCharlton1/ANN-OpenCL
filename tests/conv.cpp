@@ -9,8 +9,8 @@
 
 int main(){
     Network n(INPUTSIZE);
-    n.add_layer(new Conv(3, 3, 2, 2, 2, 3, 1, 1, leaky_ReLU, none, false));
-    n.add_layer(new Conv(2, 2, 3, 2, 2, 1, 1, 1, leaky_ReLU, none, false));
+    n.add_layer(new Conv(3, 3, 2, 2, 2, 3, 1, 1, leaky_ReLU, true));
+    n.add_layer(new Conv(2, 2, 3, 2, 2, 1, 1, 1, leaky_ReLU, true));
     n.add_layer(new Dense(1, leaky_ReLU));
     n.compile(1e-2, MSE, GrdDsc);
 

@@ -12,8 +12,7 @@ class Conv : public Dense{
     int prevw,    prevh,   prevc;
     int filterw,  filterh;
     int stridex,  stridey;
-    int features;
-
+    
     int outx, outy;
 
     float* mask = nullptr;
@@ -24,9 +23,9 @@ public:
     // to the last Layer using the provided stride multiplied by the 
     // number of output features. 
     // prevc is number of channels e.g. 3 for RGB image
-    Conv(int prevw,   int prevh,   int prevc,
-         int filterw,   int filterh,   int features,
-         int stridex, int stridey,
+    Conv(int prevw,    int prevh,       int prevc,
+         int filterw,  int filterh,     int features,
+         int stridex,  int stridey,
          Function act, bool norm=false, bool bias=true)
     : Dense(nunits(prevw, prevh, filterw, filterh, stridex, stridey, features),
             act, norm, bias){
@@ -39,8 +38,6 @@ public:
 
         outx = masks(prevw, filterw, stridex);
         outy = masks(prevh, filterh, stridey);
-
-        this->features = features;
     }
 
     int    padded_values_grad_size;

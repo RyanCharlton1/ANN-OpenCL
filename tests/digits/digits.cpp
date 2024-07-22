@@ -15,7 +15,7 @@ int main(){
     Network n(IMAGESIZE);
     n.add_layer(new Conv(28, 28, 1, 7, 7, 4, 1, 1, ReLU));
     n.add_layer(new Conv(22, 22, 4, 7, 7, 8, 1, 1, ReLU));
-    n.add_layer(new Conv(16, 16, 8, 7, 7, 12, 1, 1, ReLU));
+    n.add_layer(new Conv(16, 16, 8, 7, 7, 16, 1, 1, ReLU));
     //n.add_layer(new Dense(512, ReLU));
     //n.add_layer(new Dense(512, ReLU));
     n.add_layer(new Dense(10, softmax));
