@@ -69,6 +69,7 @@ void Dense::calc_weight_grad(Function reg, float lambda){
             1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             bsize,
+            bsize * nunits,
             input_grad_clmem,
             bias_grad_clmem);
     }

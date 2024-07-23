@@ -570,6 +570,7 @@ void Layer::calc_norm_grad(){
         1, NULL, features_size, NULL, 0, NULL, NULL,
         // Args
         bsize,
+        bsize * nunits, 
         pre_affine_values_clmem,
         input_grad_clmem,
         norm_gamma_grad_clmem);
@@ -579,6 +580,7 @@ void Layer::calc_norm_grad(){
         1, NULL, features_size, NULL, 0, NULL, NULL,
         // Args
         bsize,
+        bsize * nunits,
         input_grad_clmem,
         norm_beta_grad_clmem);
 

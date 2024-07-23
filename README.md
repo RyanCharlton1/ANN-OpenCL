@@ -173,7 +173,7 @@ $\frac{\partial u}{\partial x_i}=1 - \frac{1}{N}$
 
 $v = (\sigma^2 + \epsilon)^{\frac{1}{2}}$
 
-$\frac{\partial v}{\partial x_i} = \frac{1}{2}\frac{\partial}{\partial x_i}[\sigma^2 + \epsilon](\sigma^2 + \epsilon)^{\frac{1}{2}} = \frac{x_i - \mu}{n\sqrt{\sigma^2 + \epsilon}}$
+$\frac{\partial v}{\partial x_i} = \frac{1}{2}\frac{\partial}{\partial x_i}[\sigma^2 + \epsilon](\sigma^2 + \epsilon)^{-\frac{1}{2}} = \frac{x_i - \mu}{n\sqrt{\sigma^2 + \epsilon}}$
 
 By qoutient rule:
 

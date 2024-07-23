@@ -1,4 +1,4 @@
-#define DEBUG
+//#define DEBUG
 
 // [0, .. cols] [v1]
 // [..        ] [v2]
@@ -108,22 +108,23 @@ __global float* weight_grad){
 __kernel 
 void bias_grad(
          int    bsize,
+         int    elements,
 __global float* values_grad,
 __global float* bias_grad){
 
-    int i         = get_global_id(0);
-    int nfeatures = get_global_size(0) / bsize;
+    int feature  = get_global_id(0);
+    int features = get_global_size(0);
 
     float f = 0.0f;
-    for (int b = 0; b < bsize; b++)
-        f += values_grad[nfeatures * b + i];
+    for (int i = feature; i < elements; i += features)
+        f += values_grad[i];
 
     f /= (float)bsize;
 
-    bias_grad[i] = f;
+    bias_grad[feature] = f;
 
 #ifdef DEBUG
-    printf("bias_grad[%d]=%f\n", i, f);
+    printf("bias_grad[%d]=%f\n", feature, f);
 #endif
 }
 
@@ -467,9 +468,9 @@ __global float* act_grad){
 
     int len = get_local_size(0);
 
-    float norm_der = (1.0f - 1.0f/(float)len) * (var[l] + EPSILON);
-    norm_der      -= (1.0f/(float)len) * pow(pre_norm[i] - avg[l], 2.0f);
-    norm_der      /= pow(var[l] + EPSILON, 1.5f);
+    float norm_der = ((float)len - 1.0f) * (var[l] + EPSILON);
+    norm_der      -= pow(pre_norm[i] - avg[l], 2.0f);
+    norm_der      /= (float)len * pow(var[l] + EPSILON, 1.5f);
 
 #ifdef DEBUG
     printf("norm1d_der[%d]: %f * %f * %f\nx: %f avg: %f var:%f\n", 
@@ -482,25 +483,24 @@ __global float* act_grad){
 __kernel 
 void gamma_grad(
          int    bsize,
+         int    elements,
 __global float* pre_affine_values,
 __global float* value_grad,
 __global float* gamma_grad){
 
-    int g         = get_global_id(0);
-    int nfeatures = get_global_size(0) / bsize;
+    int feature  = get_global_id(0);
+    int features = get_global_size(0);
 
     float f = 0.0f;
-    for (int i = 0; i < bsize; i++){
-        //printf("[%d]+= %f * %f\n", g, pre_affine_values[nunits * i + g], value_grad[nunits * i + g]);
-        f += pre_affine_values[nfeatures * i + g] 
-           * value_grad[nfeatures * i + g];
-    }
+    for (int i = feature; i < elements; i += features)
+        f += pre_affine_values[i] * value_grad[i];
+
     f /= (float)bsize;
 
-    gamma_grad[g] = f;
+    gamma_grad[feature] = f;
 
 #ifdef DEBUG
-    printf("gamma_grad[%d]: %f\n", g, f);
+    printf("gamma_grad[%d]: %f\n", feature, f);
 #endif
 }
 

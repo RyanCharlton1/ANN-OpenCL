@@ -204,7 +204,7 @@ const char* function_arg_string(Function f){
     case weight_grad:
         return "iiiccc";
     case bias_grad:
-        return "icc";
+        return "iicc";
     case ReLU:
         return "cc";
     case ReLU_der:
@@ -242,7 +242,7 @@ const char* function_arg_string(Function f){
     case norm1d_der:
         return "ccccc";
     case gamma_grad:
-        return "iccc";
+        return "iiccc";
     case convolution:
         return "iiiiiiiiccc";
     case deconvolution:
