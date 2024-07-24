@@ -101,8 +101,8 @@ void Layer::init_norm_cl_mem(Function opt){
         cl->context, "norm_gamma_clmem", size, gamma_values,
         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR);
     
-    pre_norm_values_clmem = alloc_buffer(
-        cl->context, "pre_norm_values_clmem", bsize * nunits * sizeof(float));
+    pre_affine_times_grads_clmem = alloc_buffer(
+        cl->context, "pre_affine_times_grads_clmem", bsize * nunits * sizeof(float));
 
     pre_affine_values_clmem = alloc_buffer(
         cl->context, "pre_affine_values_clmem", bsize * nunits * sizeof(float));
@@ -112,6 +112,12 @@ void Layer::init_norm_cl_mem(Function opt){
 
     norm_gamma_grad_clmem = alloc_buffer(
         cl->context, "norm_gamma_grad_clmem", size);
+
+    avg_pre_act_grad_clmem = alloc_buffer(
+        cl->context, "avg_pre_act_grad_clmem", size);
+
+    avg_pre_affine_times_grads_clmem = alloc_buffer(
+        cl->context, "avg_pre_affine_times_grads_clmem", size);
 
     if (opt == adam){
         
@@ -163,7 +169,7 @@ void Layer::free_cl_mem(){
         clReleaseMemObject(norm_var_clmem);
         clReleaseMemObject(norm_beta_clmem);
         clReleaseMemObject(norm_gamma_clmem);
-        clReleaseMemObject(pre_norm_values_clmem);
+        clReleaseMemObject(pre_affine_times_grads_clmem);
         clReleaseMemObject(norm_beta_grad_clmem);
         clReleaseMemObject(norm_gamma_grad_clmem);
     }
@@ -366,17 +372,8 @@ void Layer::normalise(){
     cl_int status;
     // Hold pre norm values for computing norm gradient
     clEnqueueCopyBuffer(cl->command_queue, 
-        pre_act_values_clmem, pre_norm_values_clmem, 0, 0, 
+        pre_act_values_clmem, pre_affine_times_grads_clmem, 0, 0, 
         bsize * nunits * sizeof(float), 0, NULL, NULL);
-
-    // // Set initial average and variance calcs to zero
-    // status = clEnqueueFillBuffer(cl->command_queue, norm_avg_clmem,
-    //     &zero, sizeof(float), 0, features * sizeof(float), 0, NULL, NULL);
-    // cl_print_err("norm_avg_clmem", status);
-
-    // status = clEnqueueFillBuffer(cl->command_queue, norm_var_clmem,
-    //     &zero, sizeof(float), 0, features * sizeof(float), 0, NULL, NULL);
-    // cl_print_err("norm_var_clmem", status);
 
     clFinish(cl->command_queue);
 
@@ -565,6 +562,8 @@ void Layer::calc_norm_grad(){
     int work_size[1]     = { bsize * nunits };
     int features_size[1] = { features };
 
+    cl_event mult_complete, mult_avg_complete, grad_avg_complete;
+
     // Gamma gradient dAf/dg = N => dL/dg = dL/dAf * dAf/dg
     call_kernel(cl, gamma_grad,
         1, NULL, features_size, NULL, 0, NULL, NULL,
@@ -584,12 +583,37 @@ void Layer::calc_norm_grad(){
         input_grad_clmem,
         norm_beta_grad_clmem);
 
-    // Derivation for normalisation derivative is in README
-    call_kernel(cl, norm1d_der,
-        1, NULL, work_size, features_size, 0, NULL, NULL,
+    call_kernel(cl, vec_vec_mult,
+        1, NULL, work_size, NULL, 0, NULL, &mult_complete,
         // Args
-        pre_norm_values_clmem,
-        norm_avg_clmem,
+        pre_affine_values_clmem,
+        input_grad_clmem,
+        pre_affine_times_grads_clmem);
+    
+    call_kernel(cl, avg,
+        1, NULL, features_size, NULL, 1, &mult_complete, &mult_avg_complete,
+        // Args
+        bsize * nunits,
+        pre_affine_times_grads_clmem,
+        avg_pre_affine_times_grads_clmem);
+
+    call_kernel(cl, avg, 
+        1, NULL, features_size, NULL, 0, NULL, &grad_avg_complete,
+        // Args
+        bsize * nunits,
+        input_grad_clmem,
+        avg_pre_act_grad_clmem);
+
+    cl_event wait_list[2] = {mult_avg_complete, grad_avg_complete};
+    
+    // Derivation for normalisation derivative is in README
+    call_kernel(
+        cl, norm1d_der,
+        1, NULL, work_size, features_size, 2, wait_list, NULL,
+        // Args
+        pre_affine_values_clmem,
+        avg_pre_act_grad_clmem,
+        avg_pre_affine_times_grads_clmem,
         norm_var_clmem,
         norm_gamma_clmem,
         input_grad_clmem);

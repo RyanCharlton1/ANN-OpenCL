@@ -455,29 +455,53 @@ __global float* var){
 
 // Combine the affine and norm der calcs with act grad to get grad 
 // of all transforms after weights x prev values.
+// __kernel
+// void norm1d_der(
+// __global float* pre_norm,
+// __global float* avg,
+// __global float* var,
+// __global float* gamma,
+// __global float* act_grad){
+
+//     int i = get_global_id(0);
+//     int l = get_local_id(0);
+
+//     int len = get_local_size(0);
+
+//     float norm_der = ((float)len - 1.0f) * (var[l] + EPSILON);
+//     norm_der      -= pow(pre_norm[i] - avg[l], 2.0f);
+//     norm_der      /= (float)len * pow(var[l] + EPSILON, 1.5f);
+
+// #ifdef DEBUG
+//     printf("norm1d_der[%d]: %f * %f * %f\nx: %f avg: %f var:%f\n", 
+//         i, act_grad[i], gamma[l], norm_der, pre_norm[i], avg[l], var[l]);
+// #endif
+
+//     act_grad[i] = act_grad[i] * gamma[l] * norm_der;
+// }
+
+// Combine the affine and norm der calcs with act grad to get grad
+// of all transforms after weights x prev values.
+// Optimised for speed: https://ryli.design/blog/bnbackpass
 __kernel
 void norm1d_der(
-__global float* pre_norm,
-__global float* avg,
+__global float* pre_affine,
+__global float* avg_grad,
+__global float* avg_grad_pre_affine,
 __global float* var,
 __global float* gamma,
 __global float* act_grad){
 
-    int i = get_global_id(0);
-    int l = get_local_id(0);
+    int element = get_global_id(0);
+    int feature = get_local_id(0);
 
-    int len = get_local_size(0);
+    float norm_der;
+    norm_der  = act_grad[element];
+    norm_der -= avg_grad[feature]; 
+    norm_der -= pre_affine[element] * avg_grad_pre_affine[feature];
+    norm_der *= gamma[feature] / sqrt(var[feature] + EPSILON);
 
-    float norm_der = ((float)len - 1.0f) * (var[l] + EPSILON);
-    norm_der      -= pow(pre_norm[i] - avg[l], 2.0f);
-    norm_der      /= (float)len * pow(var[l] + EPSILON, 1.5f);
-
-#ifdef DEBUG
-    printf("norm1d_der[%d]: %f * %f * %f\nx: %f avg: %f var:%f\n", 
-        i, act_grad[i], gamma[l], norm_der, pre_norm[i], avg[l], var[l]);
-#endif
-
-    act_grad[i] = act_grad[i] * gamma[l] * norm_der;
+    act_grad[element] = norm_der;
 }
 
 __kernel 

@@ -60,8 +60,10 @@ protected:
     cl_mem norm_gamma_clmem;
     cl_mem norm_beta_grad_clmem;
     cl_mem norm_gamma_grad_clmem;
-    cl_mem pre_norm_values_clmem;
     cl_mem pre_affine_values_clmem;
+    cl_mem pre_affine_times_grads_clmem;
+    cl_mem avg_pre_act_grad_clmem;
+    cl_mem avg_pre_affine_times_grads_clmem;
 
     cl_mem adam_beta_avg_clmem;
     cl_mem adam_beta_square_clmem;

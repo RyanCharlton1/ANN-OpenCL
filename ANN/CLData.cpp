@@ -240,7 +240,7 @@ const char* function_arg_string(Function f){
     case norm1d:
         return "ccc";
     case norm1d_der:
-        return "ccccc";
+        return "cccccc";
     case gamma_grad:
         return "iiccc";
     case convolution:
