@@ -8,16 +8,18 @@ void Conv::init_cl_mem(Function opt, int bsize){
     // Backwards pass is calculated by convolution of reversed filters
     // over output gradients padded by filter dimension -1 and 
     // dilated by stride -1
-    padded_values_grad_size  = filterw + (outx - 1) * stridex + filterw - 1;
-    padded_values_grad_size *= filterh + (outy - 1) * stridey + filterh - 1;
+    padded_values_grad_size  = filterw + (outw - 1) * stridex + filterw - 1;
+    padded_values_grad_size *= filterh + (outh - 1) * stridey + filterh - 1;
     padded_values_grad_size *= features;
 
     // Weight gradients are calculated by convolution of previous Layer's
     // values with output gradients dliated by stride -1
-    dilated_values_grad_size  = 1 + (outx - 1) * stridex;
-    dilated_values_grad_size *= 1 + (outy - 1) * stridey;
+    dilated_values_grad_size  = 1 + (outw - 1) * stridex;
+    dilated_values_grad_size *= 1 + (outh - 1) * stridey;
     dilated_values_grad_size *= features;
 
+    // Buffers are padded and dilted with 0s
+    // Init to all 0s and then place the values in the correct positions
     padded_values_grad_clmem = alloc_buffer(
         cl->context, "padded_values_grad_clmem", 
         bsize * padded_values_grad_size * sizeof(float));
@@ -34,14 +36,46 @@ void Conv::init_cl_mem(Function opt, int bsize){
         cl->command_queue, dilated_values_grad_clmem, &zero, sizeof(float),
         0, bsize * dilated_values_grad_size * sizeof(float), 0, NULL, NULL);
 
+    reversed_weights_clmem = alloc_buffer(
+        cl->context, "reversed_weights_clmem", nweights * sizeof(float));
+
     clFinish(cl->command_queue);
 }
 
 void Conv::free_cl_mem(){
     Dense::free_cl_mem();
 
+    clReleaseProgram(conv_program);
     clReleaseMemObject(padded_values_grad_clmem);
     clReleaseMemObject(dilated_values_grad_clmem);
+    clReleaseMemObject(reversed_weights_clmem);
+
+    for (auto& kernel : conv_kernels)
+        clReleaseKernel(kernel.second);
+
+    conv_kernels.clear();
+}
+
+char PARAMS[] = "-DFILTERH=%d -DFILTERW=%d -DCHANNELS=%d "
+    "-DSTRIDEX=%d -DSTRIDEY=%d -DPREVH=%d -DPREVW=%d -DOUTH=%d -DOUTW=%d "
+    "-DFEATURES=%d -DBSIZE=%d";
+
+void Conv::load_kernels(){
+    cl_int status;
+    char options[256];
+
+    std::snprintf(options, 256, PARAMS, 
+        filterh, filterw, prevc, stridex, stridey, prevh, prevw, outh, 
+        outw, features, bsize);
+
+    conv_program = create_program(cl->context, cl->device_list, 
+        "../ANN/Layers/Conv.cl", options);
+
+    create_kernel(conv_program, &conv_kernels, convolution);
+    create_kernel(conv_program, &conv_kernels, pad_and_dilate);
+    create_kernel(conv_program, &conv_kernels, dilate);
+    create_kernel(conv_program, &conv_kernels, deconvolution);
+    create_kernel(conv_program, &conv_kernels, convolution_weight_grads);
 }
 
 void Conv::connect(Layer* prev){
@@ -52,22 +86,14 @@ void Conv::connect(Layer* prev){
 
 // Perform convolution using opencl kernel 
 void Conv::calc_pre_act_values(){
-    // outx and outy are the amount of masks that can be applied to the
+    // outw and outh are the amount of masks that can be applied to the
     // input image forming the output image's dimensions
-    int work_size[3] = { bsize * outy, outx, features };
+    int work_size[3] = { bsize * outh, outw, features };
 
     call_kernel(
-        cl, convolution,
+        cl->command_queue, conv_kernels, convolution,
         3, NULL, work_size, NULL, 0, NULL, NULL,
         // Args
-        prevw,
-        prevh,
-        outy,
-        filterw,
-        filterh,
-        prevc,
-        stridex,
-        stridey,
         weights_clmem,
         prev->get_values_clmem(),
         pre_act_values_clmem);
@@ -79,32 +105,22 @@ void Conv::calc_pre_act_values(){
 // dilated output gradients
 // https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
 void Conv::calc_prev_output_grad(){
-    int pad_work_size[3]    = { bsize * outy, outx, features };
+    int pad_work_size[3]    = { bsize * outh, outw, features };
+    int rev_work_size[3]    = { filterh, filterw, features };
     int deconv_work_size[3] = { bsize * prevh, prevw, prevc};
     cl_event padded;
 
     call_kernel(
-        cl, pad_and_dilate,
+        cl->command_queue, conv_kernels, pad_and_dilate,
         3, NULL, pad_work_size, NULL, 0, NULL, &padded,
         // Args
-        filterw,
-        filterh,
-        stridex,
-        stridey,
-        padded_values_grad_size,
-        bsize,
         input_grad_clmem,
         padded_values_grad_clmem);
 
     call_kernel(
-        cl, deconvolution,
+        cl->command_queue, conv_kernels, deconvolution,
         3, NULL, deconv_work_size, NULL, 1, &padded, NULL,
         // Args
-        filterw + (outx - 1) * stridex + filterw - 1,
-        filterh + (outy - 1) * stridey + filterh - 1,
-        filterw,
-        filterh,
-        features,
         weights_clmem,
         padded_values_grad_clmem,
         prev->get_output_grad_clmem());
@@ -116,34 +132,21 @@ void Conv::calc_prev_output_grad(){
 // padded and dilated output gradients
 // https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
 void Conv::calc_weight_grad(Function reg, float lambda){
-    int pad_work_size[3]  = { bsize * outy, outx, features };
+    int pad_work_size[3]  = { bsize * outh, outw, features };
     int grad_work_size[3] = { filterh, filterw, prevc * features };
     cl_event padded;
 
     call_kernel(
-        cl, pad_and_dilate,
+        cl->command_queue, conv_kernels, dilate,
         3, NULL, pad_work_size, NULL, 0, NULL, &padded,
         // Args
-        1, // Don't pad
-        1, // Don't pad
-        stridex,
-        stridey,
-        dilated_values_grad_size,
-        bsize,
         input_grad_clmem,
         dilated_values_grad_clmem);
 
     call_kernel(
-        cl, convolution_weight_grads,
+        cl->command_queue, conv_kernels, convolution_weight_grads,
         3, NULL, grad_work_size, NULL, 1, &padded, NULL,
         // Args
-        prev_nunits,
-        prevw,
-        dilated_values_grad_size,
-        1 + (outx - 1) * stridex,
-        1 + (outy - 1) * stridey,
-        prevc,
-        bsize,
         prev->get_values_clmem(),
         dilated_values_grad_clmem,
         weights_grad_clmem);

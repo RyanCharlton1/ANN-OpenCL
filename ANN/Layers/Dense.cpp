@@ -9,7 +9,7 @@
 void Dense::calc_pre_act_values(){
     int work_size[1] = { bsize * nunits };
     
-    call_kernel(cl, mat_vec_mult, 
+    call_kernel(cl->command_queue, cl->kernels, mat_vec_mult, 
         1, NULL, work_size, NULL, 0, NULL, NULL,
         // Args
         prev_nunits,
@@ -39,7 +39,7 @@ void Dense::calc_weight_grad(Function reg, float lambda){
 
     cl_event weights_done;
 
-    call_kernel(cl, weight_grad,
+    call_kernel(cl->command_queue, cl->kernels, weight_grad,
         1, NULL, global_size, NULL, 0, NULL, &weights_done,
         // Args
         bsize,
@@ -52,7 +52,7 @@ void Dense::calc_weight_grad(Function reg, float lambda){
     // TODO: fix regularisation
     switch (reg){
     case l2_reg:
-        call_kernel(cl, l2_reg, 
+        call_kernel(cl->command_queue, cl->kernels, l2_reg, 
             1, NULL, global_size, NULL, 1, &weights_done, NULL,
             // Args
             lambda,
@@ -60,18 +60,6 @@ void Dense::calc_weight_grad(Function reg, float lambda){
             weights_clmem);
 
         break;
-    }
-
-    if (has_bias){
-        global_size[0] = nunits;
-
-        call_kernel(cl, bias_grad,
-            1, NULL, global_size, NULL, 0, NULL, NULL,
-            // Args
-            bsize,
-            bsize * nunits,
-            input_grad_clmem,
-            bias_grad_clmem);
     }
 }
 
@@ -81,7 +69,7 @@ void Dense::calc_weight_grad(Function reg, float lambda){
 void Dense::calc_prev_output_grad(){
     int global_size[1] = { bsize * prev_nunits };
 
-    call_kernel(cl, mat_vec_mult_trans,
+    call_kernel(cl->command_queue, cl->kernels, mat_vec_mult_trans,
         1, NULL, global_size, NULL, 0, NULL, NULL,
         // Args
         nunits,
@@ -99,7 +87,7 @@ void Dense::calc_prev_output_grad(){
 void Dense::calc_input_grad(){
     int global_size[1] = { bsize * nunits };
 
-    call_kernel(cl, vec_vec_mult,
+    call_kernel(cl->command_queue, cl->kernels, vec_vec_mult,
         1, NULL, global_size, NULL, 0, NULL, NULL,
         // Args
         output_grad_clmem,

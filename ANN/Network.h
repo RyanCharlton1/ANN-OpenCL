@@ -30,7 +30,7 @@ public:
     Network(int ninput);
     ~Network();
 
-    void create_kernel(Function f);
+    // void create_kernel(Function f);
     void create_kernels();
 
     Layer* get_output_layer() { return layers[layers.size() - 1]; }

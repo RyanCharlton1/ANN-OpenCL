@@ -1,5 +1,8 @@
 #include <ANN/CLData.h>
 
+#include <iostream>
+#include <fstream>
+#include <sstream>
 #include <stdarg.h>
 
 // https://stackoverflow.com/a/24336429
@@ -96,7 +99,63 @@ void CLdata::free(){
     clReleaseContext(context);
     clReleaseProgram(program);
 
+    for (auto& kernel : kernels)
+        clReleaseKernel(kernel.second);
+
     delete[] device_list;
+}
+
+cl_program create_program(cl_context context, cl_device_id* devices,
+    const char* path, const char* options){
+
+    cl_int status;
+
+    // Load kernel code from file
+    std::ifstream f(path);
+    if (!f.is_open()){
+        std::cout << "Could not open file: " << path << std::endl;
+        return NULL;
+    }
+    
+    std::stringstream ssbuffer;
+    ssbuffer << f.rdbuf();
+
+    std::string str         = ssbuffer.str();
+    const char* kernel_code = str.data();
+        
+    // Build program from source code at start
+    cl_program program = clCreateProgramWithSource(
+        context, 1, &kernel_code, NULL, &status);
+    cl_print_err("Progam creation:\t", status);
+    
+    status = clBuildProgram(
+        program, 1, devices, options, NULL, NULL);
+    cl_print_err("Program build:\t\t", status);
+    
+    size_t logsize;
+    clGetProgramBuildInfo(program, devices[0], 
+    CL_PROGRAM_BUILD_LOG, 0, nullptr, &logsize);
+    
+    char* plog = new char[logsize];
+    clGetProgramBuildInfo(program, devices[0], 
+    CL_PROGRAM_BUILD_LOG, logsize, plog, NULL);
+    
+    std::cout << plog;
+    delete[] plog;
+
+    return program;
+}
+
+void create_kernel(cl_program program, 
+    std::map<Function, cl_kernel>* kernels, Function f){
+    cl_int status;
+
+    kernels->insert({f, clCreateKernel(
+        program, function_to_string(f), &status)});
+    char buffer[128];
+
+    snprintf(buffer, 128, "%s kernel creation", function_to_string(f));
+    cl_print_err(buffer, status);
 }
 
 // Allocate a cl_mem object and handle errors
@@ -114,6 +173,7 @@ cl_mem alloc_buffer(cl_context context, const char* name,
     char str[128];
     sprintf(str, "Alloc buffer %s", name);
     cl_print_err(str, status);
+    
     return buffer;
 }
 
@@ -184,6 +244,8 @@ const char* function_to_string(Function f){
         return "pad_and_dilate";
     case convolution_weight_grads:
         return "convolution_weight_grads";
+    case dilate:
+        return "dilate";
     }
     return "error";
 }
@@ -198,7 +260,7 @@ const char* function_arg_string(Function f){
     case vec_vec_mult:
         return "ccc";
     case vec_vec_add_inplace:
-        return "icc";
+        return "cc";
     case mat_vec_mult_trans:
         return "iiccc";
     case weight_grad:
@@ -244,26 +306,35 @@ const char* function_arg_string(Function f){
     case gamma_grad:
         return "iiccc";
     case convolution:
-        return "iiiiiiiiccc";
+        return "ccc";
     case deconvolution:
-        return "iiiiiccc";
+        return "ccc";
     case pad_and_dilate:
-        return "iiiiiicc";
+        return "cc";
     case convolution_weight_grads:
-        return "iiiiiiiccc";
+        return "ccc";
+    case dilate:
+        return "cc";
     }
     return "error";
 }
 
 // Enqueue kernel jobs with variadic arguments
-void call_kernel(CLdata* cl, Function fun, cl_uint work_dim, 
-    const int* global_work_offset, const int* global_work_size,
-    const int* local_work_size, cl_uint num_events_in_wait_list, 
-    const cl_event* event_wait_list, cl_event* event...){
+void call_kernel(
+    cl_command_queue              command_queue, 
+    std::map<Function, cl_kernel> kernels,
+    Function                      fun, 
+    cl_uint                       work_dim,
+    const int*                    global_work_offset,
+    const int*                    global_work_size,
+    const int*                    local_work_size,
+    cl_uint                       num_events_in_wait_list,
+    const cl_event*               event_wait_list,
+    cl_event*                     event ...){
 
     va_list     args;
     cl_int      status;
-    cl_kernel   kernel = cl->kernels[fun];
+    cl_kernel   kernel = kernels[fun];
     const char* types  = function_arg_string(fun);
     
     int    n;
@@ -315,9 +386,10 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
     // Cast int to size_t as size_t is a larger type than int
     size_t *global_work_size_ = new size_t[work_dim];
 
-    size_t *global_offset_size_   = 
+    size_t *global_offset_size_ = 
         global_work_offset ? new size_t[work_dim] : NULL;
-    size_t *local_work_size_    = 
+        
+    size_t *local_work_size_ = 
         local_work_size ? new size_t[work_dim] : NULL;
 
     for (int i = 0; i < work_dim; i++){
@@ -332,17 +404,17 @@ void call_kernel(CLdata* cl, Function fun, cl_uint work_dim,
 
     // Queue kernel jobs
     status = clEnqueueNDRangeKernel(
-        cl->command_queue, kernel, work_dim, global_offset_size_, 
+        command_queue, kernel, work_dim, global_offset_size_, 
         global_work_size_, local_work_size_, num_events_in_wait_list, 
         event_wait_list, event);
     
     cl_print_err((error + "enqueue").c_str(), status);
 
-    delete global_work_size_;
+    delete[] global_work_size_;
     if (global_offset_size_)
-        delete global_offset_size_;
+        delete[] global_offset_size_;
     if (local_work_size)
-        delete local_work_size_;
+        delete[] local_work_size_;
 
     va_end(args);
 }

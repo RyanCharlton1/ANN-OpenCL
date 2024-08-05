@@ -75,6 +75,8 @@ void Layer::init_cl_mem(Function opt, int bsize){
     
     if (norm)
         init_norm_cl_mem(adam);
+
+    load_kernels();
 }
 
 // Initialise OpenCL memory objects for normalisation, norm_beta_clmem and
@@ -347,13 +349,13 @@ void Layer::init_weights(int nweights){
 
 // Add bias to each unit in the Layer
 void Layer::add_bias(){
-    int work_size = bsize * nunits;
+    int work_size    = bsize * nunits;
+    int feature_size = features;
     
     call_kernel(
-        cl, vec_vec_add_inplace,
-        1, NULL, &work_size, NULL, 0, NULL, NULL,
+        cl->command_queue, cl->kernels, vec_vec_add_inplace,
+        1, NULL, &work_size, &feature_size, 0, NULL, NULL,
         // Args
-        nunits,
         pre_act_values_clmem,
         bias_clmem);
     
@@ -380,7 +382,7 @@ void Layer::normalise(){
     cl_event avg_complete, var_complete, norm_complete;
 
     // Calculate each feature's average across batches
-    call_kernel(cl, avg, 
+    call_kernel(cl->command_queue, cl->kernels, avg, 
         1, NULL, features_size, NULL, 0, NULL, &avg_complete,
         // Args
         bsize * nunits,
@@ -388,7 +390,7 @@ void Layer::normalise(){
         norm_avg_clmem);
     
     // Calculate each feature's variance across batches
-    call_kernel(cl, var,
+    call_kernel(cl->command_queue, cl->kernels, var,
         1, NULL, features_size, NULL, 1, &avg_complete, &var_complete,
         // Args
         bsize * nunits,
@@ -397,7 +399,7 @@ void Layer::normalise(){
         norm_var_clmem);
     
     // Normalise the values using each features variance and average
-    call_kernel(cl, norm1d,
+    call_kernel(cl->command_queue, cl->kernels, norm1d,
         1, NULL, work_size, features_size, 1, &var_complete, &norm_complete,
         // Args
         pre_act_values_clmem,
@@ -410,7 +412,7 @@ void Layer::normalise(){
         bsize * nunits * sizeof(float), 1, &norm_complete, NULL);
 
     // Apply affine transformation to normalised values
-    call_kernel(cl, affine, 
+    call_kernel(cl->command_queue, cl->kernels, affine, 
         1, NULL, work_size, features_size, 1, &norm_complete, NULL,
         // Args
         pre_act_values_clmem,
@@ -430,14 +432,14 @@ void Layer::apply_act(){
 
     switch (act){
     case softmax:
-        call_kernel(cl, softmax_sum,
+        call_kernel(cl->command_queue, cl->kernels, softmax_sum,
             1, NULL, &bsize_s, NULL, 0, NULL, &sum_done,
             // Args
             nunits, 
             softmax_sum_clmem,
             pre_act_values_clmem);
 
-        call_kernel(cl, softmax,
+        call_kernel(cl->command_queue, cl->kernels, softmax,
             1, NULL, &work_size, NULL, 1, &sum_done, NULL,
             // Args
             nunits,
@@ -450,7 +452,7 @@ void Layer::apply_act(){
     case ReLU:
     case leaky_ReLU:
         call_kernel(
-            cl, act,
+            cl->command_queue, cl->kernels, act,
             1, NULL, &work_size, NULL, 0, NULL, NULL,
             // Args,
             pre_act_values_clmem,
@@ -475,7 +477,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
 
     switch (optimiser){
     case GrdDsc:
-        call_kernel(cl, GrdDsc,
+        call_kernel(cl->command_queue, cl->kernels, GrdDsc,
             1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
             // Args
             learn_rate,
@@ -483,7 +485,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
             weights_grad_clmem);
 
         if (has_bias)
-            call_kernel(cl, GrdDsc,
+            call_kernel(cl->command_queue, cl->kernels, GrdDsc,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
@@ -491,14 +493,14 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
                 bias_grad_clmem);
         
         if (norm){
-            call_kernel(cl, GrdDsc,
+            call_kernel(cl->command_queue, cl->kernels, GrdDsc,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
                 norm_gamma_clmem,
                 norm_gamma_grad_clmem);
 
-            call_kernel(cl, GrdDsc,
+            call_kernel(cl->command_queue, cl->kernels, GrdDsc,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
@@ -508,7 +510,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
         break; 
         
     case adam:
-        call_kernel(cl, adam, 
+        call_kernel(cl->command_queue, cl->kernels, adam, 
             1, NULL, &nweights_sizet, NULL, 0, NULL, NULL,
             // Args
             learn_rate,
@@ -519,7 +521,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
             instance);
 
         if (has_bias){
-            call_kernel(cl, adam,
+            call_kernel(cl->command_queue, cl->kernels, adam,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
@@ -531,7 +533,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
         }
 
         if (norm){
-            call_kernel(cl, adam,
+            call_kernel(cl->command_queue, cl->kernels, adam,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
@@ -541,7 +543,7 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
                 adam_gamma_square_clmem,
                 instance);
                 
-            call_kernel(cl, adam,
+            call_kernel(cl->command_queue, cl->kernels, adam,
                 1, NULL, &nbias_sizet, NULL, 0, NULL, NULL,
                 // Args
                 learn_rate,
@@ -556,6 +558,21 @@ void Layer::optimise(Function optimiser, float learn_rate, int instance){
     clFinish(cl->command_queue);
 }
 
+void Layer::calc_bias_grad(float lambda){
+    int work_size = features;
+
+    call_kernel(cl->command_queue, cl->kernels, bias_grad,
+        1, NULL, &work_size, NULL, 0, NULL, NULL,
+        // Args
+        bsize,
+        bsize * nunits,
+        input_grad_clmem,
+        bias_grad_clmem);
+
+    clFinish(cl->command_queue);
+
+}
+
 // Calculate the affine transformation gradients and gradients for the 
 // pre normalisation values.
 void Layer::calc_norm_grad(){
@@ -565,7 +582,7 @@ void Layer::calc_norm_grad(){
     cl_event mult_complete, mult_avg_complete, grad_avg_complete;
 
     // Gamma gradient dAf/dg = N => dL/dg = dL/dAf * dAf/dg
-    call_kernel(cl, gamma_grad,
+    call_kernel(cl->command_queue, cl->kernels, gamma_grad,
         1, NULL, features_size, NULL, 0, NULL, NULL,
         // Args
         bsize,
@@ -575,7 +592,7 @@ void Layer::calc_norm_grad(){
         norm_gamma_grad_clmem);
 
     // Beta gradient dA/db = 1 => dL/db = dL/dAf * dAf/db
-    call_kernel(cl, bias_grad,
+    call_kernel(cl->command_queue, cl->kernels, bias_grad,
         1, NULL, features_size, NULL, 0, NULL, NULL,
         // Args
         bsize,
@@ -583,21 +600,21 @@ void Layer::calc_norm_grad(){
         input_grad_clmem,
         norm_beta_grad_clmem);
 
-    call_kernel(cl, vec_vec_mult,
+    call_kernel(cl->command_queue, cl->kernels, vec_vec_mult,
         1, NULL, work_size, NULL, 0, NULL, &mult_complete,
         // Args
         pre_affine_values_clmem,
         input_grad_clmem,
         pre_affine_times_grads_clmem);
     
-    call_kernel(cl, avg,
+    call_kernel(cl->command_queue, cl->kernels, avg,
         1, NULL, features_size, NULL, 1, &mult_complete, &mult_avg_complete,
         // Args
         bsize * nunits,
         pre_affine_times_grads_clmem,
         avg_pre_affine_times_grads_clmem);
 
-    call_kernel(cl, avg, 
+    call_kernel(cl->command_queue, cl->kernels, avg, 
         1, NULL, features_size, NULL, 0, NULL, &grad_avg_complete,
         // Args
         bsize * nunits,
@@ -605,10 +622,10 @@ void Layer::calc_norm_grad(){
         avg_pre_act_grad_clmem);
 
     cl_event wait_list[2] = {mult_avg_complete, grad_avg_complete};
-    
+
     // Derivation for normalisation derivative is in README
     call_kernel(
-        cl, norm1d_der,
+        cl->command_queue, cl->kernels, norm1d_der,
         1, NULL, work_size, features_size, 2, wait_list, NULL,
         // Args
         pre_affine_values_clmem,
@@ -631,7 +648,7 @@ void Layer::calc_act_grad(){
     int work_size = bsize * nunits; 
 
     call_kernel(
-        cl, derivative(act),
+        cl->command_queue, cl->kernels, derivative(act),
         1, NULL, &work_size, NULL, 0, NULL, NULL,
         // Args, all activaitons take a single input so I can generalise
         pre_act_values_clmem,

@@ -6,7 +6,9 @@
 #include <iostream>
 #include <map>
 
-// norm2d and none don't have distinct kernels to load
+// norm2d and none don't have distinct kernels to load and convolution
+// kernels are loaded in Conv layer with their params as preprocessor defines
+// for performance
 #define FUNCTION_COUNT norm2d
 
 enum Function {
@@ -30,11 +32,12 @@ enum Function {
     norm1d,
     norm1d_der,
     gamma_grad,
-    convolution,
-    deconvolution,
-    pad_and_dilate,
-    convolution_weight_grads,
     norm2d,
+    convolution,
+    pad_and_dilate,
+    dilate,
+    deconvolution,
+    convolution_weight_grads,
     none
 };
 
@@ -50,8 +53,15 @@ struct CLdata{
     void free();
 };
 
+cl_program create_program(cl_context context, cl_device_id* devices,
+    const char* path, const char* options=NULL);
+
+void create_kernel(cl_program program, 
+    std::map<Function, cl_kernel>* kernels, Function f);
+
 const char* cl_errstr(cl_int error);
 void cl_print_err(const char* entry, cl_int error);
+
 // Allocate a cl buffer with data in it, NULL for 0 init
 cl_mem alloc_buffer(cl_context context, const char* name, 
     int size, void* data=NULL, cl_mem_flags flag=CL_MEM_READ_WRITE);
@@ -63,14 +73,18 @@ const char* function_to_string(Function f);
 // args for use in a printf syle variadic function 
 // type : char, int : i, float : f, cl_mem* : c
 const char* function_arg_string(Function f);
+
 // Variadic function to set args and call kernel for given Function f.
 // All cl_mem should be given as pointers.
-void call_kernel(CLdata* cl, Function fun, 
-                 cl_uint         work_dim,
-                 const int*      global_work_offset,
-                 const int*      global_work_size,
-                 const int*      local_work_size,
-                 cl_uint         num_events_in_wait_list,
-                 const cl_event* event_wait_list,
-                 cl_event*       event ...);
+void call_kernel(
+    cl_command_queue              command_queue, 
+    std::map<Function, cl_kernel> kernels,
+    Function                      fun, 
+    cl_uint                       work_dim,
+    const int*                    global_work_offset,
+    const int*                    global_work_size,
+    const int*                    local_work_size,
+    cl_uint                       num_events_in_wait_list,
+    const cl_event*               event_wait_list,
+    cl_event*                     event ...);
  

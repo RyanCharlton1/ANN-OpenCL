@@ -9,15 +9,17 @@
 #define LABELSIZE  10
 
 #define BATCHSIZE 128
-#define EPOCHS    3
+#define EPOCHS    1
 
 int main(){ 
     Network n(IMAGESIZE);
-    n.add_layer(new Conv(28, 28, 1, 7, 7, 4, 1, 1, ReLU, true));
-    n.add_layer(new Conv(22, 22, 4, 7, 7, 8, 1, 1, ReLU, true));
-    n.add_layer(new Conv(16, 16, 8, 7, 7, 16, 1, 1, ReLU, true));
+    n.add_layer(new Conv(28, 28, 1, 7, 7, 4, 1, 1, ReLU, false, false));
+    n.add_layer(new Conv(22, 22, 4, 7, 7, 8, 1, 1, ReLU, false, false));
+    n.add_layer(new Conv(16, 16, 8, 7, 7, 16, 1, 1, ReLU, false, false));
     //n.add_layer(new Dense(512, ReLU));
     //n.add_layer(new Dense(512, ReLU));
+    // n.add_layer(new Conv(28, 28, 1, 28, 28, 512, 1, 1, ReLU));
+    // n.add_layer(new Conv(32, 16, 1, 32, 16, 512, 1, 1, ReLU));
     n.add_layer(new Dense(10, softmax));
     n.compile(1e-3, cross_entropy, adam); //l2_reg, 0.01f);
 
@@ -39,7 +41,7 @@ int main(){
     float* test_labels = &label_onehot[TRAINSIZE * LABELSIZE];
 
     n.evaluate(test_data, IMAGESIZE, test_labels,  LABELSIZE, TESTSIZE);
-    n.evaluate(d.data,    IMAGESIZE, label_onehot, LABELSIZE, TRAINSIZE);
+    //n.evaluate(d.data,    IMAGESIZE, label_onehot, LABELSIZE, TRAINSIZE);
 
     delete[] label_onehot;
 }

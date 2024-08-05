@@ -78,6 +78,7 @@ public:
     float* get_values()   { return values; }
     float* get_weights()  { return weights; }
     bool   get_norm()     { return norm; }
+    bool   get_bias()     { return has_bias; }
 
     void set_cl(CLdata* cl) { this->cl = cl; }
 
@@ -93,11 +94,19 @@ public:
     void cl_to_host_weights();
     void cl_to_host_norm();
 
-    // Create cl mem afor values and weights and store weights
+    // Create cl mem for values and weights and store weights
+    // Compile any custom kernels for the layer
     virtual void init_cl_mem(Function opt, int bsize=1);
     virtual void free_cl_mem();
 
     void init_norm_cl_mem(Function opt);
+
+    
+    // Compiling optimised kernels must wait until all parameters have
+    // been decided, including batch size. For this reason it cannot be 
+    // loaded at instantiation like general kernels in the Network 
+    // constructor
+    virtual void load_kernels() {};
 
     // Adam averages are calculated iteratively, so they need to be zeroed
     // each epoch
@@ -126,6 +135,8 @@ public:
     // Accumulate weight grads dL/dw by multilpying dL/dy and dy/dw(z)
     // and bias dL/db as dL/dy * dy/db(1)
     virtual void calc_weight_grad(Function reg, float lambda) {};
+    // Calculate bias grad by summation of output grads for each feature
+    void calc_bias_grad(float lambda);
     // Calculate prev Layer's gradient at output dL/dA by multiplying 
     // dL/dy and dy/dA(w^T)
     virtual void calc_prev_output_grad() {};

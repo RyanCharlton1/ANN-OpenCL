@@ -11,22 +11,10 @@
 #include <cmath>
 #include <stdlib.h>
 
-// Creare an OpenCL kernel object for function func
-void Network::create_kernel(Function func){
-    cl_int status;
-
-    cl.kernels.insert({func, clCreateKernel(
-        cl.program, function_to_string(func), &status)});
-    char buffer[128];
-
-    sprintf(buffer, "%s kernel creation", function_to_string(func));
-    cl_print_err(buffer, status);
-}
-
 // Create a kernel object for each function 
 void Network::create_kernels(){
     for (int i = 0; i < FUNCTION_COUNT; i++)
-        create_kernel((Function)i);
+        create_kernel(cl.program, &cl.kernels, (Function)i);
 }
 
 // Create all OpenCL objects for queueing and executing kernels
@@ -62,49 +50,22 @@ Network::Network(int ninput){
         cl.device_list, NULL);
     cl_print_err("Get device ids:\t\t", status);
 
-    // Create a OpenCL contxt for each device
+    // Create a OpenCL context for each device
     cl.context = clCreateContext(NULL, num_devices, cl.device_list, NULL, 
         NULL, &status);
     cl_print_err("Context creation:\t", status);
 
     // Enables out of order execution 
     cl_queue_properties prop[] = 
-        {CL_QUEUE_PROPERTIES, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, 0};
+        { CL_QUEUE_PROPERTIES, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, 0 };
     // Create a command buffer
     cl.command_queue = clCreateCommandQueueWithProperties(
         cl.context, cl.device_list[0], prop, &status);
     cl_print_err("Command queue creation:\t", status);
 
-    // Load kernel code from file
-    std::ifstream f("../ANN/kernel.cl");
-    std::stringstream buffer;
-    buffer << f.rdbuf();
-
-    std::string str         = buffer.str();
-    const char* kernel_code = str.data();
-        
-    // Build program from source code at start
-    cl.program = clCreateProgramWithSource(
-        cl.context, 1, &kernel_code, NULL, &status);
-    cl_print_err("Progam creation:\t", status);
-
-    status = clBuildProgram(
-        cl.program, 1, cl.device_list, NULL, NULL, NULL);
-        
-    cl_print_err("Program build:\t\t", status);
-
-    if (status != CL_SUCCESS){
-        size_t logsize;
-        clGetProgramBuildInfo(cl.program, cl.device_list[0], 
-        CL_PROGRAM_BUILD_LOG, 0, nullptr, &logsize);
-        
-        char* plog = new char[logsize];
-        clGetProgramBuildInfo(cl.program, cl.device_list[0], 
-        CL_PROGRAM_BUILD_LOG, logsize, plog, NULL);
-        
-        std::cout << plog;
-        delete[] plog;
-    }
+    // Load kernel from file
+    cl.program = create_program(cl.context, cl.device_list, 
+        "../ANN/kernel.cl");
 
     create_kernels();
         
@@ -232,21 +193,9 @@ float* Network::calc(float* data, int dsize){
         std::cout << "Invalid input data size" << std::endl;
         return nullptr;
     }
-    
-    // OpenCL init mem 
-    init_clmem(1);
-    input->init_cl_mem(opt, 1);
-    for (Layer* layer : layers)
-        layer->init_cl_mem(opt, 1);
 
     calc_cl(data, dsize);
-
     cl_to_host();
-
-    // OpenCL free mem
-    free_clmem();
-    for (Layer* layer: layers)
-        layer->free_cl_mem();
 
     return get_output();
 }
@@ -261,14 +210,14 @@ float Network::calc_loss(int bsize){
     switch (loss)
     {
     case MSE:
-        call_kernel(&cl, MSE, 
+        call_kernel(cl.command_queue, cl.kernels, MSE, 
             1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             expected_clmem,
             out_layer->get_values_clmem(),
             loss_clmem);
 
-        call_kernel(&cl, MSE_der,
+        call_kernel(cl.command_queue, cl.kernels, MSE_der,
             1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             out_nunits,
@@ -279,14 +228,14 @@ float Network::calc_loss(int bsize){
         break;
 
     case cross_entropy:
-        call_kernel(&cl, cross_entropy,
+        call_kernel(cl.command_queue, cl.kernels, cross_entropy,
             1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             expected_clmem,
             out_layer->get_values_clmem(),
             loss_clmem);
 
-        call_kernel(&cl, cross_entropy_der,
+        call_kernel(cl.command_queue, cl.kernels, cross_entropy_der,
             1, NULL, global_size, NULL, 0, NULL, NULL,
             // Args
             expected_clmem,
@@ -334,7 +283,7 @@ void Network::calc_output_value_grad(int bsize){
     int out_nunits[1] = { out_layer->get_nunits() };
     int work_size[1]  = { bsize * out_nunits[0] };
 
-    call_kernel(&cl, vec_vec_mult,
+    call_kernel(cl.command_queue, cl.kernels, vec_vec_mult,
         1, NULL, work_size, NULL, 0, NULL, NULL,
         // Args
         loss_grad_clmem,
@@ -372,6 +321,8 @@ float Network::fit_batch_cl(
         Layer* prev  = i != 0 ? layers[i-1] : input;
         // Calculate weight gradient dL/dw
         layer->calc_weight_grad(reg, lambda);
+        if (layer->get_bias())
+            layer->calc_bias_grad(lambda);
 
         if (prev == input) break;
         // Calculate prev Layer's act_grad dA/dz at the pre_act_values 
@@ -488,6 +439,12 @@ void Network::fit(float* data, int dsize, float* exp, int esize,
 void Network::evaluate(float* test, int tsize, float* exp, int esize,
                        int count){
 
+    // OpenCL init mem 
+    init_clmem(1);
+    input->init_cl_mem(opt, 1);
+    for (Layer* layer : layers)
+        layer->init_cl_mem(opt, 1);
+
     // Track number of correct classifications
     int classify_correct = 0;
     // TODO: implement regression evaluation
@@ -532,6 +489,11 @@ void Network::evaluate(float* test, int tsize, float* exp, int esize,
         }
     }
     std::cout << std::endl;
+
+    // OpenCL free mem
+    free_clmem();
+    for (Layer* layer: layers)
+        layer->free_cl_mem();
 }
 
 // Return a string representation of the network

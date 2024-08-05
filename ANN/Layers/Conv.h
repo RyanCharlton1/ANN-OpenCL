@@ -13,10 +13,18 @@ class Conv : public Dense{
     int filterw,  filterh;
     int stridex,  stridey;
     
-    int outx, outy;
+    int outw, outh;
 
-    float* mask = nullptr;
-    cl_mem mask_clmem;
+    cl_program                    conv_program;
+    std::map<Function, cl_kernel> conv_kernels;
+
+    int    padded_values_grad_size;
+    cl_mem padded_values_grad_clmem;
+
+    int    dilated_values_grad_size;
+    cl_mem dilated_values_grad_clmem;
+
+    cl_mem reversed_weights_clmem;
 
 public: 
     // This Layer's nunits is determined by how many kernels can applied 
@@ -36,18 +44,16 @@ public:
         this->stridex  = stridex; this->stridey = stridey;
         this->features = features;
 
-        outx = masks(prevw, filterw, stridex);
-        outy = masks(prevh, filterh, stridey);
+        outw = masks(prevw, filterw, stridex);
+        outh = masks(prevh, filterh, stridey);
     }
-
-    int    padded_values_grad_size;
-    cl_mem padded_values_grad_clmem;
-
-    int    dilated_values_grad_size;
-    cl_mem dilated_values_grad_clmem;
 
     void init_cl_mem(Function opt, int bsize=1) override;
     void free_cl_mem() override;
+
+    // Load convolution kernel with all properties of this layer as
+    // preprocessor defines to minimise computation for work items
+    void load_kernels() override;
 
     // Past values mutliplied by masks
     void calc_pre_act_values() override;
