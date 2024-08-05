@@ -1,0 +1,17 @@
+batch inference
+
+read papers
+
+word embeddings 
+transformers
+
+other topologies
+
+FIX BATCH NORM
+
+fix 1d batch norm
+
+release events and clean up buffers, valgrind, oclgrind
+
+check opencl calls style
+change __global to __constant
