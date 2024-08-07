@@ -246,6 +246,8 @@ const char* function_to_string(Function f){
         return "convolution_weight_grads";
     case dilate:
         return "dilate";
+    case average_weight_grads:
+        return "average_weight_grads";
     }
     return "error";
 }
@@ -314,6 +316,8 @@ const char* function_arg_string(Function f){
     case convolution_weight_grads:
         return "ccc";
     case dilate:
+        return "cc";
+    case average_weight_grads:
         return "cc";
     }
     return "error";

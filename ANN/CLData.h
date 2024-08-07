@@ -38,6 +38,7 @@ enum Function {
     dilate,
     deconvolution,
     convolution_weight_grads,
+    average_weight_grads,
     none
 };
 

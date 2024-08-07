@@ -24,7 +24,7 @@ class Conv : public Dense{
     int    dilated_values_grad_size;
     cl_mem dilated_values_grad_clmem;
 
-    cl_mem reversed_weights_clmem;
+    cl_mem batch_weight_grads_clmem;
 
 public: 
     // This Layer's nunits is determined by how many kernels can applied 

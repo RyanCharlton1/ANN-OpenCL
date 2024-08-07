@@ -36,8 +36,9 @@ void Conv::init_cl_mem(Function opt, int bsize){
         cl->command_queue, dilated_values_grad_clmem, &zero, sizeof(float),
         0, bsize * dilated_values_grad_size * sizeof(float), 0, NULL, NULL);
 
-    reversed_weights_clmem = alloc_buffer(
-        cl->context, "reversed_weights_clmem", nweights * sizeof(float));
+    batch_weight_grads_clmem = alloc_buffer(
+        cl->context, "batch_weight_grads_clmem", 
+        bsize * nweights * sizeof(float));
 
     clFinish(cl->command_queue);
 }
@@ -48,7 +49,7 @@ void Conv::free_cl_mem(){
     clReleaseProgram(conv_program);
     clReleaseMemObject(padded_values_grad_clmem);
     clReleaseMemObject(dilated_values_grad_clmem);
-    clReleaseMemObject(reversed_weights_clmem);
+    clReleaseMemObject(batch_weight_grads_clmem);
 
     for (auto& kernel : conv_kernels)
         clReleaseKernel(kernel.second);
@@ -71,11 +72,8 @@ void Conv::load_kernels(){
     conv_program = create_program(cl->context, cl->device_list, 
         "../ANN/Layers/Conv.cl", options);
 
-    create_kernel(conv_program, &conv_kernels, convolution);
-    create_kernel(conv_program, &conv_kernels, pad_and_dilate);
-    create_kernel(conv_program, &conv_kernels, dilate);
-    create_kernel(conv_program, &conv_kernels, deconvolution);
-    create_kernel(conv_program, &conv_kernels, convolution_weight_grads);
+    for (int i = convolution; i < none; i++)
+        create_kernel(conv_program, &conv_kernels, (Function)i);
 }
 
 void Conv::connect(Layer* prev){
@@ -133,8 +131,8 @@ void Conv::calc_prev_output_grad(){
 // https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
 void Conv::calc_weight_grad(Function reg, float lambda){
     int pad_work_size[3]  = { bsize * outh, outw, features };
-    int grad_work_size[3] = { filterh, filterw, prevc * features };
-    cl_event padded;
+    int grad_work_size[3] = { bsize * filterh, filterw, prevc * features };
+    cl_event padded, batch;
 
     call_kernel(
         cl->command_queue, conv_kernels, dilate,
@@ -143,13 +141,28 @@ void Conv::calc_weight_grad(Function reg, float lambda){
         input_grad_clmem,
         dilated_values_grad_clmem);
 
+    // call_kernel(
+    //     cl->command_queue, conv_kernels, convolution_weight_grads,
+    //     3, NULL, grad_work_size, NULL, 1, &padded, NULL,
+    //     // Args
+    //     prev->get_values_clmem(),
+    //     dilated_values_grad_clmem,
+    //     weights_grad_clmem);
+
     call_kernel(
         cl->command_queue, conv_kernels, convolution_weight_grads,
-        3, NULL, grad_work_size, NULL, 1, &padded, NULL,
+        3, NULL, grad_work_size, NULL, 1, &padded, &batch,
         // Args
         prev->get_values_clmem(),
         dilated_values_grad_clmem,
-        weights_grad_clmem);
+        batch_weight_grads_clmem);
+
+    call_kernel(
+        cl->command_queue, conv_kernels, average_weight_grads,
+        1, NULL, &nweights, NULL, 1, &batch, NULL,
+        // Args
+        batch_weight_grads_clmem,
+        weights_grad_clmem);    
 
     // TODO: reg
 

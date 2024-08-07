@@ -5,6 +5,7 @@
 // and unrolling loops
 // https://deeplearning.cs.cmu.edu/F21/document/recitation/Recitation5/CNN_Backprop_Recitation_5_F21.pdf
 
+
 // Filters: features[filterh[filterw[channels]]]
 // Values:  batches[prevh[prevw[channels]]]
 // result:  batches[filtersy[filtersx[features]]]
@@ -221,42 +222,38 @@ __global float* weight_grad){
     int filterw  = get_global_size(1);
     int features = get_global_size(2) / CHANNELS;
 
+    int batch = weighty / FILTERH;
+    weighty %= FILTERH;
+    
     // Max 3 dimensions for work group, include channels and features 
     // as one dimension of features x channels
     int feature = channel / CHANNELS;
     channel %= CHANNELS;
 
-    int values_start = weighty * PREVW + weightx;
+    int values_start = (batch * PREVH + weighty) * PREVW + weightx;
+    int grad_start   = batch * DILATEDROWS * DILATEDCOLS;
 
     float acc = 0.0f;
 
-    for (int y = 0; y < DILATEDCOLS; y++){
+    #pragma unroll
+    for (int y = 0; y < DILATEDROWS; y++){
         int valuesy = values_start + y * PREVW;
-        int gradsy  = y * DILATEDCOLS;
+        int gradsy  = grad_start + y * DILATEDCOLS;
 
         #pragma unroll
-        for (int x = 0; x < DILATEDROWS; x++){
+        for (int x = 0; x < DILATEDCOLS; x++){
             int valuesx = valuesy + x;
             int valuesc = valuesx * CHANNELS + channel;    
             int gradsx  = gradsy + x;
             int gradsc  = gradsx * FEATURES + feature;
             
-            #pragma unroll
-            for (int b = 0; b < BSIZE; b++){
-                int valuesb = valuesc + b * PREVSIZE;
-                int gradsb  = gradsc + b * DILATEDSIZE;
-
-                acc += values[valuesb] * padded_grads[gradsb];
-            }
+            acc += values[valuesc] * padded_grads[gradsc];
         }
     }
 
-    acc /= (float)BSIZE;
-
     int weight_index;
-    weight_index  = (feature * FILTERH + weighty) * FILTERW + weightx;
-    // weight_index += weighty * FILTERW;
-    // weight_index += weightx;
+    weight_index  = batch * FILTERH * FILTERW * FEATURES;
+    weight_index += (feature * FILTERH + weighty) * FILTERW + weightx;
     weight_index *= CHANNELS;
     weight_index += channel;
 
@@ -265,4 +262,20 @@ __global float* weight_grad){
 #ifdef DEBUG 
     printf("conv_grad[%d]: %f\n", weight_index, acc);
 #endif
+}
+
+__kernel 
+void average_weight_grads(
+__global float* weight_grads,
+__global float* result){
+
+    int weight_index = get_global_id(0);
+
+    float acc = 0.0f;
+
+    #pragma unroll
+    for (int b = 0; b < BSIZE; b++)
+        acc += weight_grads[weight_index + b * get_global_size(0)];
+    
+    result[weight_index] = acc / (float)BSIZE;
 }
