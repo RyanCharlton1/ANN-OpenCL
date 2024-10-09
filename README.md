@@ -7,13 +7,15 @@ A general purpose ANN framework made with C++ OpenCL
 
 Zeros negative values, but unchanged otherwise. Leaky multiplies by some $\epsilon$ to stop neurons 'dying' when they hit zero and can't be changed anymore.
 
-$r(z_i)=\max(z_i, \epsilon z_i) = \begin{cases}
-    z_i & \text{if} z_i > 0\\ \epsilon z_i & \text{otherwise}
-\end{cases}$
+$$r(z_i)=\max(z_i, \epsilon z_i) = \begin{cases}
+    z_i & \text{if} z_i > 0 \\ 
+    \epsilon z_i & \text{otherwise}
+\end{cases}$$
 
-$\frac{\partial r}{\partial z_i}=\begin{cases}
-    1 & \text{if} z_i > 0\\ \epsilon & \text{otherwise}
-\end{cases}$
+$$\frac{\partial r}{\partial z_i}=\begin{cases}
+    1 & \text{if} z_i > 0 \\
+    \epsilon & \text{otherwise}
+\end{cases}$$
 
 ### Softmax 
 Returns a vector summing to one, modelling probability
@@ -22,12 +24,12 @@ $\sigma(z_i) = \frac{e^{z_i}}{\Sigma_{j=0}^ne^{z_j}}$
 
 Takes vector and returns a vector so differential is a matrix:
 
-$\frac{\partial\sigma}{\partial z} = 
+$$\frac{\partial\sigma}{\partial z} = 
 \begin{pmatrix} \frac{\partial\sigma_1}{\partial z_1} & \frac{\partial\sigma_1}{\partial z_2} & \cdots & \frac{\partial\sigma_1}{\partial z_n} \\
 \frac{\partial\sigma_2}{\partial z_1} & \frac{\partial\sigma_2}{\partial z_2} & \cdots\ & \frac{\partial\sigma_2}{\partial z_n} \\
 \vdots & \vdots & \ddots & \vdots\\ 
 \frac{\partial\sigma_n}{\partial z_1} & \frac{\partial\sigma_n}{\partial z_2} & \cdots & \frac{\partial\sigma_n}{\partial z_n}
-\end{pmatrix}$ 
+\end{pmatrix}$$
 
 By chain rule(valid as $\sigma_i$ will always be positive):
 
@@ -49,7 +51,10 @@ $\frac{\partial}{\partial z_j}\Sigma_{l=1}^ne^{z_l} = e^{z_j}$
 
 $\frac{\partial}{\partial z_j}\ln(\Sigma_{l=1}^ne^{z_l}) = \frac{e^{z_j}}{\Sigma_{l=1}^ne^{z_l}} = \sigma_j$
 
-$\frac{\partial z_i}{\partial z_j} = \begin{cases} 1 &\text{if } i = j \\ 0 & \text{otherwise} \end{cases}$
+$$\frac{\partial z_i}{\partial z_j} = 
+\begin{cases} 1 &\text{if } i = j \\
+0 & \text{otherwise} 
+\end{cases}$$
 
 $\frac{\partial}{\partial z_j}\ln(\sigma_i) = \frac{\partial z_i}{\partial z_j} - \frac{\partial}{\partial z_j}\ln(\Sigma_{l=1}^ne^{z_l}) = 1\lbrace i=j \rbrace - \sigma_j$
 
@@ -57,9 +62,13 @@ $\frac{\partial}{\partial z_j}\ln(\sigma_i) = \frac{\partial z_i}{\partial z_j} 
 $\frac{\partial \sigma_i}{\partial z_j} = \sigma_i \cdot \frac{\partial}{\partial z_j}\ln(\sigma_i) = \sigma_i(1\lbrace i=j \rbrace - \sigma_j)$ 
 
 
-$\frac{\partial\sigma}{\partial z} = 
-\begin{pmatrix} \sigma_1(1 - \sigma_1) & -\sigma_1\sigma_2 & \cdots & -\sigma_1\sigma_n \\  -\sigma_2\sigma_1& \sigma_2(1 - \sigma_2) & \cdots & -\sigma_2\sigma_n \\ \vdots & \vdots & \ddots &\vdots \\
--\sigma_n\sigma_1 & -\sigma_n\sigma_2 & \cdots & \sigma_n(1 - \sigma_n) \end{pmatrix}$
+$$\frac{\partial\sigma}{\partial z} = 
+\begin{pmatrix} 
+\sigma_1(1 - \sigma_1) & -\sigma_1\sigma_2 & \cdots & -\sigma_1\sigma_n \\
+-\sigma_2\sigma_1& \sigma_2(1 - \sigma_2) & \cdots & -\sigma_2\sigma_n \\ 
+\vdots & \vdots & \ddots &\vdots \\
+-\sigma_n\sigma_1 & -\sigma_n\sigma_2 & \cdots & \sigma_n(1 - \sigma_n) 
+\end{pmatrix}$$
 
 ## Loss Functions
 
